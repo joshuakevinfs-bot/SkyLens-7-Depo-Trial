@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+build/
+tools/
+*.log
+.DS_Store
+data/private/
+data/raw/

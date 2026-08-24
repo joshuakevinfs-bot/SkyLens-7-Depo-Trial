@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071513" />
+    <title>SkyLens · Command Center</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <header class="brand-row compact">
+          <a class="brand-mark" href="../">S</a>
+          <div><strong>SKYLENS</strong><span>COMMAND CENTER</span></div>
+          <span class="pilot-badge">PMTILES PILOT</span>
+        </header>
+
+        <section class="location-card">
+          <span>DEPOT AKTIF</span>
+          <strong>Banjarmasin Selatan</strong>
+          <small>Kalimantan Selatan · model pilot7_v2</small>
+        </section>
+
+        <section class="kpi-grid">
+          <article><span>Opportunity</span><strong>999</strong><small>zona model</small></article>
+          <article><span>Zona pilot</span><strong>18</strong><small>peluang ≥40%</small></article>
+          <article><span>Atap</span><strong>553.454</strong><small>vector features</small></article>
+          <article><span>Outlet aktif</span><strong>3.197</strong><small>agregat RO</small></article>
+        </section>
+
+        <section class="control-card">
+          <div class="section-title"><span>Layer</span><small id="zoomLabel">Zoom —</small></div>
+          <label class="toggle-row">
+            <span><i class="dot opportunity"></i>Opportunity tiles</span>
+            <input id="toggleOpportunity" type="checkbox" checked /><b></b>
+          </label>
+          <label class="toggle-row">
+            <span><i class="dot buildings"></i>Atap bangunan</span>
+            <input id="toggleBuildings" type="checkbox" checked /><b></b>
+          </label>
+          <label class="toggle-row">
+            <span><i class="dot pilot"></i>Hanya zona pilot</span>
+            <input id="togglePilot" type="checkbox" /><b></b>
+          </label>
+          <div class="zoom-rule">
+            <span>Zoom nasional</span><b>Opportunity</b>
+            <span>Zoom ≥16</span><b>Individual atap</b>
+          </div>
+        </section>
+
+        <section class="legend-card">
+          <div class="section-title"><span>Opportunity status</span></div>
+          <div class="legend-list">
+            <span><i style="--c:#e34b4b"></i>Kurang digarap <b>35</b></span>
+            <span><i style="--c:#2cc884"></i>Tergarap <b>314</b></span>
+            <span><i style="--c:#f2b84b"></i>Whitespace padat <b>650 total</b></span>
+          </div>
+        </section>
+
+        <section class="benchmark-card">
+          <div class="section-title"><span>Live performance</span><small>viewport-only</small></div>
+          <div class="metric-row"><span>First map idle</span><b id="metricLoad">mengukur…</b></div>
+          <div class="metric-row"><span>PMTiles bytes fetched</span><b id="metricBytes">mengukur…</b></div>
+          <div class="metric-row"><span>JS heap</span><b id="metricHeap">browser check</b></div>
+          <div class="metric-row"><span>Pan/zoom FPS</span><b id="metricFps">belum dites</b></div>
+          <button id="runBenchmark" class="action-button">Tes pan/zoom 4 detik</button>
+        </section>
+
+        <p class="privacy-note">Data outlet ditampilkan sebagai agregat. Identitas toko, nomor telepon, GPS sales, dan transaksi mentah tidak dipublikasikan.</p>
+      </aside>
+
+      <main class="map-stage">
+        <div id="map"></div>
+        <div class="map-topbar">
+          <div><strong id="modeLabel">Opportunity overview</strong><span id="modeHint">Zoom mendekat untuk membuka detail atap.</span></div>
+          <button id="homeView" title="Kembali ke depot">⌂</button>
+        </div>
+        <div id="hoverCard" class="hover-card" hidden></div>
+      </main>
+    </div>
+    <script type="module" src="../assets/app.js"></script>
+  </body>
+</html>

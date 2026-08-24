@@ -1,0 +1,56 @@
+{
+  "generated_at": "2026-08-24T02:43:57.765Z",
+  "depot": "Banjarmasin Selatan",
+  "fixtures": {
+    "opportunity_zones": 999,
+    "pilot_zones": 18,
+    "buildings": 553454
+  },
+  "legacy": {
+    "mode": "legacy-embedded-gzip",
+    "source_payload_bytes": 16361908,
+    "compressed_binary_bytes": 12271430,
+    "decoded_text_bytes": 33161319,
+    "valid_features": 553454,
+    "vertices": 2998634,
+    "initial_load_ms": 803.2,
+    "heap_before_mb": 8.23,
+    "heap_after_mb": 51.23,
+    "heap_delta_mb": 43,
+    "rss_delta_mb": 155.49
+  },
+  "pmtiles": {
+    "mode": "pmtiles-sharded",
+    "archive_bytes": 28710889,
+    "shard_size_bytes": 716800,
+    "archive_sha256": "cfbf227252aa19961e19cfadd7d677bb5994db1cd9f8beefb0d7ab44fdbf6421",
+    "min_zoom": 4,
+    "max_zoom": 16,
+    "overview_zoom": 10,
+    "overview_tile_found": true,
+    "overview_initial_load_ms": 13.6,
+    "overview_download_bytes": 716800,
+    "close_zoom": 16,
+    "close_tiles_found": 9,
+    "close_viewport_load_ms": 6.5,
+    "cumulative_download_bytes": 1433600,
+    "chunks_downloaded": 2,
+    "heap_delta_mb": 1.04,
+    "rss_delta_mb": 6.19
+  },
+  "comparison": {
+    "archive_size_change_pct": 75.5,
+    "overview_transfer_reduction_pct": 95.6,
+    "close_view_transfer_reduction_pct": 91.2,
+    "memory_reduction_pct": 96
+  },
+  "interaction_checks": {
+    "hover": "implemented",
+    "click": "implemented",
+    "building_area_and_class": "preserved",
+    "google_maps": "preserved",
+    "street_view": "preserved",
+    "opportunity_model_logic": "unchanged",
+    "fps": "measured live in the dashboard; headless WebGL result is environment-dependent"
+  }
+}
