@@ -6,6 +6,9 @@
 - **Field App:** tugas sales, tracking, penyisiran 4×4, foto, serta outcome kunjungan.
 - **Supabase:** Auth, database operasional, RLS, dan private storage.
 - **Model pipeline:** menghasilkan skor dan estimasi per petak; tidak dijalankan di browser.
+- **Vector delivery:** Tippecanoe + PMTiles untuk opportunity dan Open Buildings; MapLibre hanya meminta tile yang terlihat.
+
+Pilot PMTiles dan kontrak zoom dijelaskan di [pmtiles-architecture.md](pmtiles-architecture.md).
 
 ## Kontrak grid
 

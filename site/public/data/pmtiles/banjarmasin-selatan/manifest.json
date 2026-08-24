@@ -1,0 +1,173 @@
+{
+  "format": "pmtiles-shards-v1",
+  "archive_name": "banjarmasin-selatan.pmtiles",
+  "archive_size": 28710889,
+  "archive_sha256": "cfbf227252aa19961e19cfadd7d677bb5994db1cd9f8beefb0d7ab44fdbf6421",
+  "chunk_size": 716800,
+  "chunks": [
+    {
+      "name": "00000.bin",
+      "size": 716800
+    },
+    {
+      "name": "00001.bin",
+      "size": 716800
+    },
+    {
+      "name": "00002.bin",
+      "size": 716800
+    },
+    {
+      "name": "00003.bin",
+      "size": 716800
+    },
+    {
+      "name": "00004.bin",
+      "size": 716800
+    },
+    {
+      "name": "00005.bin",
+      "size": 716800
+    },
+    {
+      "name": "00006.bin",
+      "size": 716800
+    },
+    {
+      "name": "00007.bin",
+      "size": 716800
+    },
+    {
+      "name": "00008.bin",
+      "size": 716800
+    },
+    {
+      "name": "00009.bin",
+      "size": 716800
+    },
+    {
+      "name": "00010.bin",
+      "size": 716800
+    },
+    {
+      "name": "00011.bin",
+      "size": 716800
+    },
+    {
+      "name": "00012.bin",
+      "size": 716800
+    },
+    {
+      "name": "00013.bin",
+      "size": 716800
+    },
+    {
+      "name": "00014.bin",
+      "size": 716800
+    },
+    {
+      "name": "00015.bin",
+      "size": 716800
+    },
+    {
+      "name": "00016.bin",
+      "size": 716800
+    },
+    {
+      "name": "00017.bin",
+      "size": 716800
+    },
+    {
+      "name": "00018.bin",
+      "size": 716800
+    },
+    {
+      "name": "00019.bin",
+      "size": 716800
+    },
+    {
+      "name": "00020.bin",
+      "size": 716800
+    },
+    {
+      "name": "00021.bin",
+      "size": 716800
+    },
+    {
+      "name": "00022.bin",
+      "size": 716800
+    },
+    {
+      "name": "00023.bin",
+      "size": 716800
+    },
+    {
+      "name": "00024.bin",
+      "size": 716800
+    },
+    {
+      "name": "00025.bin",
+      "size": 716800
+    },
+    {
+      "name": "00026.bin",
+      "size": 716800
+    },
+    {
+      "name": "00027.bin",
+      "size": 716800
+    },
+    {
+      "name": "00028.bin",
+      "size": 716800
+    },
+    {
+      "name": "00029.bin",
+      "size": 716800
+    },
+    {
+      "name": "00030.bin",
+      "size": 716800
+    },
+    {
+      "name": "00031.bin",
+      "size": 716800
+    },
+    {
+      "name": "00032.bin",
+      "size": 716800
+    },
+    {
+      "name": "00033.bin",
+      "size": 716800
+    },
+    {
+      "name": "00034.bin",
+      "size": 716800
+    },
+    {
+      "name": "00035.bin",
+      "size": 716800
+    },
+    {
+      "name": "00036.bin",
+      "size": 716800
+    },
+    {
+      "name": "00037.bin",
+      "size": 716800
+    },
+    {
+      "name": "00038.bin",
+      "size": 716800
+    },
+    {
+      "name": "00039.bin",
+      "size": 716800
+    },
+    {
+      "name": "00040.bin",
+      "size": 38889
+    }
+  ]
+}

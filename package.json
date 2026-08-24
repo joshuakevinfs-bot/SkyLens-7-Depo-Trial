@@ -1,0 +1,19 @@
+{
+  "name": "skylens-7-depo-trial",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "node --check site/assets/app.js && node --check site/assets/field.js"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.1.0",
+    "pmtiles": "4.4.1"
+  },
+  "devDependencies": {
+    "vite": "7.1.3"
+  }
+}

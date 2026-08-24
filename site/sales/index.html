@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#071513" />
+    <title>SkyLens · Field App</title>
+  </head>
+  <body class="field-body">
+    <main class="field-shell">
+      <header class="field-header">
+        <a href="../" class="brand-mark">S</a>
+        <div><strong>SkyLens Field</strong><span>Banjarmasin Selatan · mode preview</span></div>
+        <button id="resetPreview" aria-label="Reset progress">↻</button>
+      </header>
+
+      <section id="taskScreen" class="field-screen active">
+        <div class="field-hero">
+          <span>TUGAS PILOT</span>
+          <strong><b id="doneCount">0</b>/18 zona mulai disisir</strong>
+          <small>Progress preview tersimpan di perangkat ini.</small>
+        </div>
+        <label class="search-box"><span>⌕</span><input id="taskSearch" placeholder="Cari desa, kecamatan, atau key petak" /></label>
+        <div class="task-filters">
+          <button class="active" data-filter="all">Semua</button>
+          <button data-filter="open">Belum selesai</button>
+          <button data-filter="done">Selesai</button>
+        </div>
+        <div id="taskList" class="task-list"></div>
+      </section>
+
+      <section id="mapScreen" class="field-screen map-screen">
+        <div id="fieldMap"></div>
+        <div class="field-map-top">
+          <button id="backToTasks">←</button>
+          <div><strong id="activeArea">Zona pilot</strong><span id="activeKey">—</span></div>
+          <span id="gpsBadge" class="gps-badge">GPS OFF</span>
+        </div>
+        <div class="field-sheet">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head">
+            <div><span>PROGRESS SWEEP 4×4</span><strong id="cellProgress">0/16 kotak</strong></div>
+            <div class="score-pill" id="activeScore">0%</div>
+          </div>
+          <div class="progress-track"><i id="progressBar"></i></div>
+          <p id="dwellHint">Aktifkan GPS. Kotak dianggap selesai setelah berada 45 detik di dalamnya.</p>
+          <div class="field-actions">
+            <button id="gpsToggle" class="primary">Mulai GPS</button>
+            <a id="navigateLink" target="_blank" rel="noopener">Navigasi</a>
+            <button id="demoCell">Demo +1</button>
+          </div>
+          <button id="openFinding" class="finding-button">＋ Catat temuan toko</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="findingDialog" class="finding-dialog">
+      <form method="dialog" id="findingForm">
+        <div class="dialog-title"><strong>Temuan lapangan</strong><button value="cancel">×</button></div>
+        <label>Hasil kunjungan<select id="findingOutcome" required><option value="">Pilih hasil</option><option>Kandidat NOO</option><option>Sudah dicover</option><option>Revisit</option><option>Tidak tertarik</option></select></label>
+        <label>Nama toko / patokan<input id="findingName" placeholder="Contoh: Toko Maju Jaya" /></label>
+        <label>Catatan<textarea id="findingNotes" rows="3" placeholder="Potensi, tipe toko, atau informasi penting"></textarea></label>
+        <p>Preview: data tersimpan lokal dan belum dikirim ke Supabase.</p>
+        <button class="save-finding" value="default">Simpan temuan</button>
+      </form>
+    </dialog>
+
+    <script type="module" src="../assets/field.js"></script>
+  </body>
+</html>
