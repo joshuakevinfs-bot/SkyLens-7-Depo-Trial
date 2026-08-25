@@ -565,7 +565,7 @@ function gambarZona(){
       '<div class="pv"><i>Perkiraan outlet</i><b>'+z[8]+'</b></div>'+
       '<div class="pv"><i>Perkiraan Tier A</i><b>'+z[9]+'</b></div>'+
       '<a class="pbtn" target="_blank" href="https://www.google.com/maps?q='+lat+','+lon+'">Buka di Google Maps</a>';
-    if(isPilot) isiPopup += htmlAssignZona(keyPetak);
+    isiPopup += htmlAssignZona(keyPetak); // semua petak bisa di-assign, bukan cuma yang PILOT
     pasangHoverKlik(r, nama+' — '+stt+' · '+z[4].toLocaleString('id-ID')+' bangunan'+(isPilot?' · PILOT':''),
       isiPopup, gaya, {color:'#111', weight: isPilot?4:2.5, fillColor:w, fillOpacity:.55, opacity:1});
     tampil.push(r);
