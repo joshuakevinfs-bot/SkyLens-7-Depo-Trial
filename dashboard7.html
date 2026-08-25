@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkyLens 7 Depo — Command Center</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --bg:#0f1115; --panel:#161a22; --panel2:#1d222c; --line:#2a3140; --text:#e7ebf3; --sub:#9aa4b8; --accent:#4f8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);}
+  #app{display:flex;height:100vh;}
+  #panel{width:380px;min-width:380px;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:14px;}
+  #mapwrap{flex:1;position:relative;}
+  #map{height:100%;width:100%;background:#0b0d12;}
+  h1{font-size:15px;margin:0 0 10px;}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin:18px 0 8px;border-bottom:1px solid var(--line);padding-bottom:6px;}
+  select,button,input{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:13px;width:100%;margin-bottom:8px;}
+  button{cursor:pointer;background:var(--accent);border:none;font-weight:600;}
+  button.secondary{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-weight:400;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .stat{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--sub);}
+  .stat b{color:var(--text);}
+  table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  th,td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:left;}
+  th{color:var(--sub);font-weight:600;}
+  .pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10.5px;font-weight:600;}
+  .badge-pilot{background:#5b3dd1;color:#fff;font-size:9px;padding:1px 5px;border-radius:4px;margin-left:5px;}
+  .legend{position:absolute;bottom:20px;right:12px;background:rgba(22,26,34,.92);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11.5px;z-index:1000;}
+  .legend div{display:flex;align-items:center;gap:6px;margin:3px 0;}
+  .sw{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  #toast{position:fixed;bottom:16px;left:396px;background:#222;border:1px solid var(--line);padding:10px 14px;border-radius:8px;font-size:12.5px;display:none;z-index:2000;}
+  .small{font-size:11px;color:var(--sub);}
+  .row2{display:flex;gap:6px;}
+  .row2>*{flex:1;}
+  a.link{color:var(--accent);text-decoration:none;}
+  .feed-item{border-bottom:1px solid var(--line);padding:6px 0;font-size:11.5px;}
+  .feed-item .meta{color:var(--sub);font-size:10.5px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <h1>SkyLens 7 Depo — Command Center</h1>
+    <select id="depotSel"></select>
+    <div class="row2">
+      <button class="secondary" id="btnReload">Muat ulang</button>
+      <button class="secondary" id="btnFitAll">Fit ke depot</button>
+    </div>
+
+    <h2>Ringkasan</h2>
+    <div id="stats"></div>
+
+    <h2>Assign zona pilot</h2>
+    <select id="assignSalesSel"></select>
+    <select id="assignZoneSel"></select>
+    <button id="btnAssign">Assign</button>
+    <div class="small" id="assignMsg"></div>
+
+    <h2>Progress sweep (zona pilot)</h2>
+    <div id="progressTable"></div>
+
+    <h2>Rute perjalanan sales</h2>
+    <select id="routeSalesSel"></select>
+    <button class="secondary" id="btnLoadRoute">Muat rute</button>
+    <div class="small" id="routeMsg"></div>
+
+    <h2>Area manual (di luar grid)</h2>
+    <div id="manualList" class="small"></div>
+
+    <h2>Temuan terbaru</h2>
+    <div id="findingsFeed"></div>
+  </div>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div class="legend">
+      <div><span class="sw" style="background:#c0392b"></span>Kurang digarap</div>
+      <div><span class="sw" style="background:#e67e22"></span>Whitespace padat (&ge;300 bgn)</div>
+      <div><span class="sw" style="background:#f1c40f"></span>Whitespace sedang</div>
+      <div><span class="sw" style="background:#bdc3c7"></span>Whitespace tipis</div>
+      <div><span class="sw" style="background:#27ae60"></span>Sudah tergarap</div>
+      <div style="margin-top:4px;border-top:1px solid var(--line);padding-top:4px;">Kotak garis tebal ungu = zona pilot</div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://hrgbrfzvzpmnbitdqawl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyZ2JyZnp2enBtbmJpdGRxYXdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMDY0MTUsImV4cCI6MjEwMjg4MjQxNX0.3oa7mZqTOIV8bn2GcI7c3rSYnsIqjkvVXGWYHm6RoAg';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const DEPOTS = [
+  {id:'JAMBI', label:'Jambi'},
+  {id:'KUDUS', label:'Kudus'},
+  {id:'TULUNG_AGUNG', label:'Tulung Agung'},
+  {id:'BANJARBARU', label:'Banjarbaru'},
+  {id:'BANJARMASIN_SELATAN', label:'Banjarmasin Selatan'},
+  {id:'KENDARI', label:'Kendari'},
+  {id:'DENPASAR', label:'Denpasar'},
+];
+
+let map, depotId = DEPOTS[0].id;
+let zoneLayer = L.layerGroup();
+let manualLayer = L.layerGroup();
+let routeLayer = L.layerGroup();
+let zonesCache = [];       // zones for current depot
+let salesCache = [];       // sales for current depot
+let assignCache = [];      // assignments joined w/ zone+sales for current depot
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display='block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>{ el.style.display='none'; }, 3200);
+}
+
+function initMap(){
+  map = L.map('map', { zoomControl:true }).setView([-2.5,118],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'OSM'}).addTo(map);
+  zoneLayer.addTo(map);
+  manualLayer.addTo(map);
+  routeLayer.addTo(map);
+}
+
+function warnaZona(z){
+  if(z.status === 'kurang_digarap') return '#c0392b';
+  if(z.status === 'tergarap') return '#27ae60';
+  const bgn = z.building_count || 0;
+  if(bgn >= 300) return '#e67e22';
+  if(bgn >= 100) return '#f1c40f';
+  return '#bdc3c7';
+}
+
+function populateDepotSel(){
+  const sel = document.getElementById('depotSel');
+  sel.innerHTML = DEPOTS.map(d=>`<option value="${d.id}">${d.label}</option>`).join('');
+  sel.value = depotId;
+  sel.onchange = ()=>{ depotId = sel.value; loadDepot(); };
+}
+
+async function loadDepot(){
+  toast('Memuat data '+depotId+'...');
+  const [{data: zones, error: e1}, {data: sales, error: e2}] = await Promise.all([
+    sb.from('zones').select('*').eq('depot_id', depotId).limit(10000),
+    sb.from('sales').select('*').eq('depot_id', depotId).eq('active', true).order('full_name'),
+  ]);
+  if(e1) { toast('Gagal load zones: '+e1.message); return; }
+  if(e2) { toast('Gagal load sales: '+e2.message); return; }
+  zonesCache = zones || [];
+  salesCache = sales || [];
+  await loadAssignments();
+  await loadManualAreas();
+  await loadFindingsFeed();
+  renderZones();
+  renderStats();
+  renderSalesSelects();
+  renderAssignZoneSel();
+  await renderProgressTable();
+  fitAll();
+}
+
+async function loadAssignments(){
+  const { data, error } = await sb.from('assignments').select('*').eq('depot_id', depotId);
+  if(error){ toast('Gagal load assignments: '+error.message); assignCache=[]; return; }
+  assignCache = data || [];
+}
+
+function renderZones(){
+  zoneLayer.clearLayers();
+  zonesCache.forEach(z=>{
+    const bounds = [[z.min_lat, z.min_lon],[z.max_lat, z.max_lon]];
+    const rect = L.rectangle(bounds, {
+      color: z.is_pilot ? '#8e5bff' : warnaZona(z),
+      weight: z.is_pilot ? 2.4 : 0.6,
+      fillColor: warnaZona(z),
+      fillOpacity: 0.55,
+    });
+    rect.bindPopup(popupZona(z));
+    rect.addTo(zoneLayer);
+  });
+}
+
+function popupZona(z){
+  const pilotBadge = z.is_pilot ? '<span class="badge-pilot">PILOT</span>' : '';
+  return `<div style="font-size:12.5px;min-width:200px">
+    <b>${z.village_name||'-'}, ${z.district_name||'-'}</b> ${pilotBadge}<br>
+    key_petak: ${z.key_petak}<br>
+    Status: ${z.status}<br>
+    Bangunan: ${z.building_count} (besar: ${z.large_building_count})<br>
+    Toko terdaftar: ${z.registered_outlets} · Estimasi outlet: ${z.estimated_outlets}<br>
+    Peluang Tier A: ${(z.peluang_a*100).toFixed(1)}% · Est. Tier A: ${z.estimated_tier_a}<br>
+    <a class="link" href="https://www.google.com/maps?q=${z.center_lat},${z.center_lon}" target="_blank">Buka di Google Maps</a>
+  </div>`;
+}
+
+function renderStats(){
+  const n = zonesCache.length;
+  const pilot = zonesCache.filter(z=>z.is_pilot).length;
+  const kurang = zonesCache.filter(z=>z.status==='kurang_digarap').length;
+  const whitespace = zonesCache.filter(z=>z.status==='whitespace').length;
+  const bgn = zonesCache.reduce((a,z)=>a+(z.building_count||0),0);
+  const estA = zonesCache.reduce((a,z)=>a+(z.estimated_tier_a||0),0);
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><span>Zona tampil</span><b>${n}</b></div>
+    <div class="stat"><span>Kurang digarap</span><b>${kurang}</b></div>
+    <div class="stat"><span>Whitespace</span><b>${whitespace}</b></div>
+    <div class="stat"><span>Zona pilot</span><b>${pilot}</b></div>
+    <div class="stat"><span>Total bangunan</span><b>${bgn.toLocaleString('id-ID')}</b></div>
+    <div class="stat"><span>Estimasi Tier A</span><b>${estA.toFixed(1)}</b></div>
+    <div class="stat"><span>Sales aktif</span><b>${salesCache.length}</b></div>
+  `;
+}
+
+function renderSalesSelects(){
+  const opts = '<option value="">— Pilih sales —</option>' + salesCache.map(s=>`<option value="${s.id}">${s.full_name} (${s.sales_code})</option>`).join('');
+  document.getElementById('assignSalesSel').innerHTML = opts;
+  document.getElementById('routeSalesSel').innerHTML = opts;
+}
+
+function renderAssignZoneSel(){
+  const pilotZones = zonesCache.filter(z=>z.is_pilot);
+  const assignedKeys = new Set(assignCache.map(a=>a.zone_key));
+  const opts = '<option value="">— Pilih zona pilot —</option>' + pilotZones.map(z=>{
+    const done = assignedKeys.has(z.key_petak) ? ' [sudah di-assign]' : '';
+    return `<option value="${z.key_petak}">${z.village_name||z.key_petak} — ${(z.peluang_a*100).toFixed(0)}%${done}</option>`;
+  }).join('');
+  document.getElementById('assignZoneSel').innerHTML = opts;
+}
+
+async function renderProgressTable(){
+  const wrap = document.getElementById('progressTable');
+  if(!assignCache.length){ wrap.innerHTML = '<div class="small">Belum ada zona pilot yang di-assign.</div>'; return; }
+  const salesById = Object.fromEntries(salesCache.map(s=>[s.id,s]));
+  const zoneByKey = Object.fromEntries(zonesCache.map(z=>[z.key_petak,z]));
+  const ids = assignCache.map(a=>a.id);
+  const { data: cells } = await sb.from('zone_cells').select('assignment_id').in('assignment_id', ids);
+  const countByAssign = {};
+  (cells||[]).forEach(c=>{ countByAssign[c.assignment_id] = (countByAssign[c.assignment_id]||0)+1; });
+  let rows = assignCache.map(a=>{
+    const s = salesById[a.sales_id]; const z = zoneByKey[a.zone_key];
+    const visited = countByAssign[a.id]||0;
+    const pct = Math.round(visited/16*100);
+    return `<tr><td>${z?z.village_name||z.key_petak:a.zone_key}</td><td>${s?s.full_name:'-'}</td><td>${a.status}</td><td>${visited}/16 (${pct}%)</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table><tr><th>Petak</th><th>Sales</th><th>Status</th><th>Sweep</th></tr>${rows}</table>`;
+}
+
+document.getElementById('btnAssign').onclick = async ()=>{
+  const salesId = document.getElementById('assignSalesSel').value;
+  const zoneKey = document.getElementById('assignZoneSel').value;
+  const msg = document.getElementById('assignMsg');
+  if(!salesId || !zoneKey){ msg.textContent = 'Pilih sales dan zona dulu.'; return; }
+  const { error } = await sb.from('assignments').insert({ depot_id: depotId, zone_key: Number(zoneKey), sales_id: salesId, status: 'assigned' });
+  if(error){ msg.textContent = 'Gagal: '+error.message; return; }
+  msg.textContent = 'Berhasil di-assign.';
+  await loadAssignments();
+  renderAssignZoneSel();
+  await renderProgressTable();
+};
+
+document.getElementById('btnLoadRoute').onclick = async ()=>{
+  const salesId = document.getElementById('routeSalesSel').value;
+  const msg = document.getElementById('routeMsg');
+  routeLayer.clearLayers();
+  if(!salesId){ msg.textContent = 'Pilih sales dulu.'; return; }
+  msg.textContent = 'Memuat rute...';
+  const { data: pts, error } = await sb.from('location_tracks')
+    .select('latitude,longitude,recorded_at')
+    .eq('sales_id', salesId)
+    .order('recorded_at', {ascending:true})
+    .limit(5000);
+  if(error){ msg.textContent = 'Gagal: '+error.message; return; }
+  if(!pts || !pts.length){ msg.textContent = 'Belum ada data GPS buat sales ini.'; return; }
+  const latlngs = pts.map(p=>[p.latitude,p.longitude]);
+  const line = L.polyline(latlngs, {color:'#4f8cff', weight:3, opacity:0.8}).addTo(routeLayer);
+  L.circleMarker(latlngs[0], {radius:5,color:'#27ae60'}).bindTooltip('Mulai').addTo(routeLayer);
+  L.circleMarker(latlngs[latlngs.length-1], {radius:5,color:'#c0392b'}).bindTooltip('Terakhir').addTo(routeLayer);
+  map.fitBounds(line.getBounds(), {padding:[30,30]});
+  msg.textContent = `${pts.length} titik GPS, dari ${new Date(pts[0].recorded_at).toLocaleString('id-ID')} sampai ${new Date(pts[pts.length-1].recorded_at).toLocaleString('id-ID')}.`;
+};
+
+async function loadManualAreas(){
+  const { data, error } = await sb.from('manual_areas').select('*').eq('depot_id', depotId).limit(500);
+  manualLayer.clearLayers();
+  const wrap = document.getElementById('manualList');
+  if(error){ wrap.innerHTML = '<div class="small">Gagal load: '+error.message+'</div>'; return; }
+  if(!data || !data.length){ wrap.innerHTML = '<div class="small">Belum ada area manual di depot ini.</div>'; return; }
+  wrap.innerHTML = data.map(m=>`<div class="feed-item"><b>${m.name||'(tanpa nama)'}</b><div class="meta">${m.reason||''} · ${new Date(m.created_at).toLocaleDateString('id-ID')}</div></div>`).join('');
+  data.forEach(m=>{
+    try{
+      const gj = typeof m.geojson === 'string' ? JSON.parse(m.geojson) : m.geojson;
+      if(!gj) return;
+      const layer = L.geoJSON(gj, { style:{ color:'#ff9800', weight:2, fillColor:'#ff9800', fillOpacity:0.25, dashArray:'4 3' } });
+      layer.bindPopup(`<b>${m.name||'(tanpa nama)'}</b><br>${m.reason||''}`);
+      layer.addTo(manualLayer);
+    }catch(e){}
+  });
+}
+
+async function loadFindingsFeed(){
+  const { data, error } = await sb.from('findings').select('*').eq('depot_id', depotId).order('found_at', {ascending:false}).limit(15);
+  const wrap = document.getElementById('findingsFeed');
+  if(error){ wrap.innerHTML = '<div class="small">Gagal load: '+error.message+'</div>'; return; }
+  if(!data || !data.length){ wrap.innerHTML = '<div class="small">Belum ada temuan.</div>'; return; }
+  wrap.innerHTML = data.map(f=>`<div class="feed-item">
+    <b>${f.outlet_name || (f.outcome==='ada_grosir'?'Ada grosir':'Temuan')}</b>
+    <div class="meta">${f.outcome||'-'} · ${new Date(f.found_at).toLocaleString('id-ID')}</div>
+    ${f.notes?('<div>'+f.notes+'</div>'):''}
+  </div>`).join('');
+}
+
+function fitAll(){
+  if(!zonesCache.length) return;
+  const b = L.latLngBounds(zonesCache.map(z=>[z.center_lat,z.center_lon]));
+  map.fitBounds(b, {padding:[20,20]});
+}
+
+document.getElementById('btnReload').onclick = loadDepot;
+document.getElementById('btnFitAll').onclick = fitAll;
+
+initMap();
+populateDepotSel();
+loadDepot();
+</script>
+</body>
+</html>

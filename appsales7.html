@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>SkyLens 7 Depo — Sales</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --bg:#0f1115; --panel:#161a22; --panel2:#1d222c; --line:#2a3140; --text:#e7ebf3; --sub:#9aa4b8; --accent:#4f8cff; --green:#27ae60; --red:#c0392b; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+  .screen{display:none;height:100vh;flex-direction:column;}
+  .screen.active{display:flex;}
+  .topbar{padding:12px 14px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .topbar b{font-size:14px;}
+  .topbar .sub{font-size:11px;color:var(--sub);}
+  select,button,input,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px;font-size:14px;width:100%;margin-bottom:10px;}
+  button{cursor:pointer;background:var(--accent);border:none;font-weight:600;}
+  button.secondary{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-weight:400;}
+  button.danger{background:var(--red);}
+  button.ghost{background:transparent;border:1px solid var(--line);}
+  #gateScreen{align-items:center;justify-content:center;padding:24px;}
+  .gatebox{width:100%;max-width:340px;}
+  .gatebox h1{font-size:18px;text-align:center;margin-bottom:4px;}
+  .gatebox p{font-size:12.5px;color:var(--sub);text-align:center;margin-top:0;margin-bottom:20px;}
+  #zoneListScreen .list{flex:1;overflow-y:auto;padding:10px 14px;}
+  .zcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;}
+  .zcard b{font-size:13.5px;}
+  .zcard .meta{font-size:11px;color:var(--sub);margin:4px 0 8px;}
+  .pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:10.5px;font-weight:600;}
+  .pill.assigned{background:#333;color:#ccc;}
+  .pill.done{background:var(--green);color:#fff;}
+  #mapScreen{position:relative;}
+  #mapEl{flex:1;width:100%;}
+  .navcard{position:absolute;top:10px;left:10px;right:10px;background:rgba(22,26,34,.95);border:1px solid var(--line);border-radius:10px;padding:10px 12px;z-index:1000;font-size:12.5px;}
+  .fabrow{position:absolute;bottom:14px;left:10px;right:10px;display:flex;gap:8px;z-index:1000;}
+  .fabrow button{margin:0;}
+  .progwrap{position:absolute;top:70px;left:10px;right:10px;background:rgba(22,26,34,.9);border-radius:8px;height:8px;overflow:hidden;z-index:1000;}
+  .progfill{height:100%;background:var(--accent);width:0%;transition:width .3s;}
+  .backbtn{background:transparent;border:none;color:var(--text);font-size:20px;width:auto;padding:4px 8px;margin:0;}
+  .modalBackdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:3000;}
+  .modalBackdrop.show{display:flex;}
+  .modal{background:var(--panel);border-top-left-radius:16px;border-top-right-radius:16px;padding:18px;width:100%;max-width:480px;}
+  .modal h3{margin:0 0 12px;font-size:15px;}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#222;border:1px solid var(--line);padding:10px 16px;border-radius:20px;font-size:12.5px;display:none;z-index:4000;max-width:90%;text-align:center;}
+  .trackdot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px;animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="gateScreen" class="screen active">
+  <div class="gatebox">
+    <h1>SkyLens — Sales</h1>
+    <p>Pilih depot dan nama kamu buat lihat zona yang ditugaskan.</p>
+    <select id="depotInput"></select>
+    <select id="salesInput"><option value="">— Pilih depot dulu —</option></select>
+    <button id="btnMasuk">Masuk</button>
+  </div>
+</div>
+
+<!-- ZONE LIST -->
+<div id="zoneListScreen" class="screen">
+  <div class="topbar">
+    <div><b id="salesLabel"></b><div class="sub"><span class="trackdot"></span>GPS aktif sejak login</div></div>
+    <button class="ghost" style="width:auto" id="btnGanti">Ganti</button>
+  </div>
+  <div class="list" id="zoneList"></div>
+  <div style="padding:10px 14px;">
+    <button class="secondary" id="btnManualGlobal">+ Tandai potensi di lokasi saya sekarang</button>
+  </div>
+</div>
+
+<!-- MAP / ZONE DETAIL -->
+<div id="mapScreen" class="screen">
+  <div id="mapEl"></div>
+  <div class="navcard" id="navcard">
+    <button class="backbtn" id="btnBack">&larr;</button>
+    <b id="zoneTitle"></b>
+    <div class="sub" id="zoneSub"></div>
+  </div>
+  <div class="progwrap"><div class="progfill" id="progfill"></div></div>
+  <div class="fabrow">
+    <button class="secondary" id="btnTemuan">Catat temuan</button>
+    <button class="secondary" id="btnManualZone">+ Manual area</button>
+  </div>
+</div>
+
+<!-- MODAL: TEMUAN -->
+<div class="modalBackdrop" id="modalTemuan">
+  <div class="modal">
+    <h3>Catat temuan</h3>
+    <select id="fOutcome">
+      <option value="ada_grosir">Ada grosir / toko besar</option>
+      <option value="tidak_ada">Tidak ada apa-apa</option>
+      <option value="follow_up">Perlu follow-up lagi</option>
+    </select>
+    <input id="fOutletName" placeholder="Nama toko/warung (opsional)">
+    <textarea id="fNotes" rows="3" placeholder="Catatan..."></textarea>
+    <button id="btnSubmitTemuan">Simpan</button>
+    <button class="ghost" id="btnCancelTemuan">Batal</button>
+  </div>
+</div>
+
+<!-- MODAL: MANUAL AREA -->
+<div class="modalBackdrop" id="modalManual">
+  <div class="modal">
+    <h3>Tandai area manual</h3>
+    <p class="sub" style="margin-top:-6px">Bikin kotak ~150x150m di lokasi kamu sekarang. Buat nandain potensi yang belum ke-cover grid otomatis.</p>
+    <input id="mName" placeholder="Nama area (misal: Ruko baru dekat pasar)">
+    <textarea id="mReason" rows="3" placeholder="Alasan / apa yang kamu lihat..."></textarea>
+    <button id="btnSubmitManual">Simpan</button>
+    <button class="ghost" id="btnCancelManual">Batal</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://hrgbrfzvzpmnbitdqawl.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhyZ2JyZnp2enBtbmJpdGRxYXdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMDY0MTUsImV4cCI6MjEwMjg4MjQxNX0.3oa7mZqTOIV8bn2GcI7c3rSYnsIqjkvVXGWYHm6RoAg';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const DEPOTS = [
+  {id:'JAMBI', label:'Jambi'},
+  {id:'KUDUS', label:'Kudus'},
+  {id:'TULUNG_AGUNG', label:'Tulung Agung'},
+  {id:'BANJARBARU', label:'Banjarbaru'},
+  {id:'BANJARMASIN_SELATAN', label:'Banjarmasin Selatan'},
+  {id:'KENDARI', label:'Kendari'},
+  {id:'DENPASAR', label:'Denpasar'},
+];
+
+// ---------- state ----------
+let me = null;              // {id, depot_id, sales_code, full_name}
+let assignments = [];       // assignments + zone data for me
+let activeAssignment = null;
+let activeZone = null;
+let map, youMarker, zoneRect, gridLayer, followMode = true;
+let visitedCells = new Set();
+let cellDwellMs = {};
+let lastCellIdx = null;
+let lastPosT = null;
+const DWELL_CELL_MS = 8000;      // waktu minimal di 1 kotak buat dianggap "disisir"
+const CELL_GRID = 4;             // 4x4
+
+let watchId = null;
+let lastSaved = null;
+let uploadBuffer = [];
+let uploadTimer = null;
+const JARAK_MIN_M = 15;
+const DIAM_HEARTBEAT_MS = 20000;
+const UPLOAD_BATCH_N = 8;
+const UPLOAD_INTERVAL_MS = 15000;
+
+function toast(msg, ms){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display='block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>{ el.style.display='none'; }, ms||3000);
+}
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000, toRad=x=>x*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function bearing(lat1,lon1,lat2,lon2){
+  const toRad=x=>x*Math.PI/180, toDeg=x=>x*180/Math.PI;
+  const y = Math.sin(toRad(lon2-lon1))*Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1))*Math.sin(toRad(lat2)) - Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(toRad(lon2-lon1));
+  return (toDeg(Math.atan2(y,x))+360)%360;
+}
+
+// ---------- login ----------
+const depotSel = document.getElementById('depotInput');
+depotSel.innerHTML = DEPOTS.map(d=>`<option value="${d.id}">${d.label}</option>`).join('');
+depotSel.onchange = loadSalesForDepot;
+async function loadSalesForDepot(){
+  const depotId = depotSel.value;
+  const salesSel = document.getElementById('salesInput');
+  salesSel.innerHTML = '<option value="">Memuat...</option>';
+  const { data, error } = await sb.from('sales').select('*').eq('depot_id', depotId).eq('active', true).order('full_name');
+  if(error){ salesSel.innerHTML = '<option value="">Gagal memuat</option>'; return; }
+  salesSel.innerHTML = '<option value="">— Pilih nama sales —</option>' + (data||[]).map(s=>`<option value="${s.id}">${s.full_name}</option>`).join('');
+}
+loadSalesForDepot();
+
+document.getElementById('btnMasuk').onclick = async ()=>{
+  const salesId = document.getElementById('salesInput').value;
+  if(!salesId){ toast('Pilih nama sales dulu'); return; }
+  const { data, error } = await sb.from('sales').select('*').eq('id', salesId).single();
+  if(error || !data){ toast('Gagal login: '+(error?error.message:'sales tidak ditemukan')); return; }
+  me = data;
+  document.getElementById('salesLabel').textContent = me.full_name;
+  showScreen('zoneListScreen');
+  mulaiTracking();
+  await muatDaftarZona();
+};
+
+document.getElementById('btnGanti').onclick = ()=>{
+  hentikanTracking();
+  me = null; assignments = [];
+  showScreen('gateScreen');
+};
+
+// ---------- daftar zona ----------
+async function muatDaftarZona(){
+  const wrap = document.getElementById('zoneList');
+  wrap.innerHTML = '<div class="sub" style="padding:10px">Memuat...</div>';
+  const { data: assigns, error } = await sb.from('assignments').select('*').eq('sales_id', me.id).eq('depot_id', me.depot_id);
+  if(error){ wrap.innerHTML = '<div class="sub" style="padding:10px">Gagal: '+error.message+'</div>'; return; }
+  if(!assigns || !assigns.length){ wrap.innerHTML = '<div class="sub" style="padding:10px">Belum ada zona yang di-assign ke kamu. Hubungi BM/koordinator.</div>'; return; }
+  const keys = assigns.map(a=>a.zone_key);
+  const { data: zones } = await sb.from('zones').select('*').eq('depot_id', me.depot_id).in('key_petak', keys);
+  const zoneByKey = Object.fromEntries((zones||[]).map(z=>[z.key_petak,z]));
+  const ids = assigns.map(a=>a.id);
+  const { data: cells } = await sb.from('zone_cells').select('assignment_id').in('assignment_id', ids);
+  const countByAssign = {};
+  (cells||[]).forEach(c=>{ countByAssign[c.assignment_id]=(countByAssign[c.assignment_id]||0)+1; });
+  assignments = assigns.map(a=>({ ...a, zone: zoneByKey[a.zone_key], visited: countByAssign[a.id]||0 }));
+  wrap.innerHTML = assignments.map((a,i)=>{
+    const z = a.zone;
+    const pct = Math.round((a.visited/16)*100);
+    const pillClass = pct>=100?'done':'assigned';
+    return `<div class="zcard" data-i="${i}">
+      <b>${z?z.village_name||a.zone_key:a.zone_key}</b> <span class="pill ${pillClass}">${pct}%</span>
+      <div class="meta">${z?z.district_name:''} · Peluang Tier A ${z?(z.peluang_a*100).toFixed(0):'-'}%</div>
+      <button class="secondary" data-open="${i}">Buka peta</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-open]').forEach(btn=>{
+    btn.onclick = ()=>bukaZona(assignments[Number(btn.dataset.open)]);
+  });
+}
+
+// ---------- peta zona + sweep ----------
+function bukaZona(assignment){
+  activeAssignment = assignment;
+  activeZone = assignment.zone;
+  visitedCells = new Set();
+  cellDwellMs = {}; lastCellIdx = null;
+  showScreen('mapScreen');
+  document.getElementById('zoneTitle').textContent = activeZone ? (activeZone.village_name||activeAssignment.zone_key) : activeAssignment.zone_key;
+  document.getElementById('zoneSub').textContent = activeZone ? `${activeZone.district_name} · key_petak ${activeZone.key_petak}` : '';
+  setTimeout(()=>{ initMapIfNeeded(); drawZone(); }, 50);
+}
+
+document.getElementById('btnBack').onclick = ()=>{
+  activeAssignment = null; activeZone = null;
+  showScreen('zoneListScreen');
+  muatDaftarZona();
+};
+
+function initMapIfNeeded(){
+  if(map) { map.invalidateSize(); return; }
+  map = L.map('mapEl', {zoomControl:false}).setView([-2.5,118],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+  gridLayer = L.layerGroup().addTo(map);
+}
+
+async function drawZone(){
+  if(gridLayer) gridLayer.clearLayers();
+  if(!activeZone) return;
+  const z = activeZone;
+  zoneRect = L.rectangle([[z.min_lat,z.min_lon],[z.max_lat,z.max_lon]], {color:'#8e5bff', weight:2, fillOpacity:0}).addTo(gridLayer);
+  map.fitBounds(zoneRect.getBounds(), {padding:[20,20]});
+
+  // load existing visited cells for this assignment
+  const { data: cells } = await sb.from('zone_cells').select('cell_index').eq('assignment_id', activeAssignment.id);
+  (cells||[]).forEach(c=>visitedCells.add(c.cell_index));
+
+  drawGrid();
+  updateProgress();
+}
+
+function cellBounds(idx){
+  const z = activeZone;
+  const r = Math.floor(idx / CELL_GRID), c = idx % CELL_GRID;
+  const dLat = (z.max_lat - z.min_lat) / CELL_GRID;
+  const dLon = (z.max_lon - z.min_lon) / CELL_GRID;
+  const lat0 = z.min_lat + r*dLat, lat1 = lat0+dLat;
+  const lon0 = z.min_lon + c*dLon, lon1 = lon0+dLon;
+  return [[lat0,lon0],[lat1,lon1]];
+}
+let cellRects = [];
+function drawGrid(){
+  cellRects = [];
+  for(let i=0;i<CELL_GRID*CELL_GRID;i++){
+    const rect = L.rectangle(cellBounds(i), {
+      color:'#4f8cff', weight:1, fillOpacity: visitedCells.has(i)?0.5:0.08,
+      fillColor: visitedCells.has(i) ? '#27ae60' : '#4f8cff',
+    }).addTo(gridLayer);
+    cellRects[i] = rect;
+  }
+}
+function updateProgress(){
+  const pct = Math.round(visitedCells.size/16*100);
+  document.getElementById('progfill').style.width = pct+'%';
+}
+function cellIndexForPos(lat,lon){
+  const z = activeZone;
+  if(!z) return null;
+  if(lat<z.min_lat||lat>z.max_lat||lon<z.min_lon||lon>z.max_lon) return null;
+  const dLat=(z.max_lat-z.min_lat)/CELL_GRID, dLon=(z.max_lon-z.min_lon)/CELL_GRID;
+  const r = Math.min(CELL_GRID-1, Math.floor((lat-z.min_lat)/dLat));
+  const c = Math.min(CELL_GRID-1, Math.floor((lon-z.min_lon)/dLon));
+  return r*CELL_GRID + c;
+}
+
+// ---------- tracking: nyala sejak login ----------
+function mulaiTracking(){
+  lastSaved = null; uploadBuffer = [];
+  if(watchId){ navigator.geolocation.clearWatch(watchId); }
+  if(uploadTimer) clearInterval(uploadTimer);
+  if('geolocation' in navigator){
+    watchId = navigator.geolocation.watchPosition(
+      pos => onPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+      err => { toast('GPS tidak aktif / izin ditolak'); },
+      { enableHighAccuracy:true, maximumAge:2000, timeout:8000 }
+    );
+  }
+  uploadTimer = setInterval(flushUploadBuffer, UPLOAD_INTERVAL_MS);
+}
+function hentikanTracking(){
+  if(watchId){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+  if(uploadTimer){ clearInterval(uploadTimer); uploadTimer=null; }
+  flushUploadBuffer();
+}
+
+let lastPos = null;
+function onPosition(lat, lon, acc){
+  lastPos = {lat, lon, acc, t: Date.now()};
+  catatBreadcrumbJikaPerlu(lat, lon, acc);
+
+  if(youMarker){ youMarker.setLatLng([lat,lon]); }
+  else if(map){ youMarker = L.circleMarker([lat,lon], {radius:6,color:'#4f8cff',fillColor:'#4f8cff',fillOpacity:1}).addTo(map); }
+  if(map && followMode && document.getElementById('mapScreen').classList.contains('active')){
+    map.panTo([lat,lon], {animate:true});
+  }
+
+  if(activeZone){
+    const idx = cellIndexForPos(lat, lon);
+    const now = Date.now();
+    if(idx !== null){
+      const dt = (lastCellIdx===idx && lastPosT) ? Math.min(now-lastPosT, 5000) : 0;
+      cellDwellMs[idx] = (cellDwellMs[idx]||0) + dt;
+      if(!visitedCells.has(idx) && cellDwellMs[idx] >= DWELL_CELL_MS){
+        visitedCells.add(idx);
+        if(cellRects[idx]) cellRects[idx].setStyle({fillOpacity:0.5, fillColor:'#27ae60'});
+        updateProgress();
+        sb.from('zone_cells').insert({
+          assignment_id: activeAssignment.id, cell_index: idx, depot_id: me.depot_id,
+          status:'visited', dwell_seconds: Math.round(cellDwellMs[idx]/1000),
+          first_entered_at: new Date().toISOString(), completed_at: new Date().toISOString(),
+        }).then(({error})=>{ if(error) console.warn('gagal simpan zone_cells:', error.message); });
+      }
+      lastCellIdx = idx; lastPosT = now;
+    } else { lastCellIdx = null; lastPosT = now; }
+  }
+}
+
+function catatBreadcrumbJikaPerlu(lat, lon, acc){
+  const t = Date.now();
+  let simpan = !lastSaved;
+  if(lastSaved){
+    const jarak = haversine(lastSaved.lat, lastSaved.lon, lat, lon);
+    const selisih = t - lastSaved.t;
+    simpan = (jarak >= Math.max(JARAK_MIN_M, acc||JARAK_MIN_M)) || (selisih >= DIAM_HEARTBEAT_MS);
+  }
+  if(!simpan) return;
+  lastSaved = {lat, lon, t};
+  uploadBuffer.push({
+    depot_id: me.depot_id,
+    assignment_id: activeAssignment ? activeAssignment.id : null,
+    sales_id: me.id,
+    recorded_at: new Date(t).toISOString(),
+    latitude: lat, longitude: lon,
+    accuracy_m: acc!=null?Math.round(acc):null,
+    event_type: activeAssignment ? 'in_zone' : 'travel',
+  });
+  if(uploadBuffer.length >= UPLOAD_BATCH_N) flushUploadBuffer();
+}
+function flushUploadBuffer(){
+  if(!uploadBuffer.length) return;
+  const kirim = uploadBuffer.splice(0, uploadBuffer.length);
+  sb.from('location_tracks').insert(kirim).then(({error})=>{
+    if(error) console.warn('gagal simpan breadcrumb:', error.message);
+  });
+}
+window.addEventListener('beforeunload', flushUploadBuffer);
+
+// ---------- temuan ----------
+document.getElementById('btnTemuan').onclick = ()=>{
+  if(!activeAssignment){ toast('Buka zona dulu'); return; }
+  document.getElementById('modalTemuan').classList.add('show');
+};
+document.getElementById('btnCancelTemuan').onclick = ()=> document.getElementById('modalTemuan').classList.remove('show');
+document.getElementById('btnSubmitTemuan').onclick = async ()=>{
+  const outcome = document.getElementById('fOutcome').value;
+  const outlet = document.getElementById('fOutletName').value;
+  const notes = document.getElementById('fNotes').value;
+  const p = lastPos || {lat:activeZone.center_lat, lon:activeZone.center_lon, acc:null};
+  const { error } = await sb.from('findings').insert({
+    depot_id: me.depot_id, assignment_id: activeAssignment.id, zone_key: activeAssignment.zone_key,
+    sales_id: me.id, created_by: me.id, found_at: new Date().toISOString(),
+    latitude: p.lat, longitude: p.lon, gps_accuracy_m: p.acc!=null?Math.round(p.acc):null,
+    outlet_name: outlet||null, outcome, notes: notes||null,
+  });
+  if(error){ toast('Gagal simpan: '+error.message); return; }
+  document.getElementById('modalTemuan').classList.remove('show');
+  document.getElementById('fOutletName').value=''; document.getElementById('fNotes').value='';
+  toast('Temuan tersimpan.');
+};
+
+// ---------- manual area ----------
+let manualCtx = 'zone'; // 'zone' or 'global'
+document.getElementById('btnManualZone').onclick = ()=>{ manualCtx='zone'; document.getElementById('modalManual').classList.add('show'); };
+document.getElementById('btnManualGlobal').onclick = ()=>{
+  if(!lastPos){ toast('Nunggu sinyal GPS dulu ya, coba beberapa detik lagi.'); return; }
+  manualCtx='global'; document.getElementById('modalManual').classList.add('show');
+};
+document.getElementById('btnCancelManual').onclick = ()=> document.getElementById('modalManual').classList.remove('show');
+document.getElementById('btnSubmitManual').onclick = async ()=>{
+  if(!lastPos){ toast('Belum ada posisi GPS.'); return; }
+  const name = document.getElementById('mName').value;
+  const reason = document.getElementById('mReason').value;
+  const HALF = 0.00075; // ~83m -> kotak ~165x165m
+  const {lat, lon} = lastPos;
+  const geojson = {
+    type:'Feature', properties:{},
+    geometry:{ type:'Polygon', coordinates:[[
+      [lon-HALF, lat-HALF],[lon+HALF, lat-HALF],[lon+HALF, lat+HALF],[lon-HALF, lat+HALF],[lon-HALF, lat-HALF]
+    ]] }
+  };
+  const { error } = await sb.from('manual_areas').insert({
+    depot_id: me.depot_id, drawn_by: me.id, name: name||'(tanpa nama)', reason: reason||null,
+    geojson: JSON.stringify(geojson),
+  });
+  if(error){ toast('Gagal simpan: '+error.message); return; }
+  document.getElementById('modalManual').classList.remove('show');
+  document.getElementById('mName').value=''; document.getElementById('mReason').value='';
+  toast('Area manual tersimpan. Bakal keliatan di dashboard.');
+};
+</script>
+</body>
+</html>
