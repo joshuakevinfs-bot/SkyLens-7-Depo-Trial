@@ -501,6 +501,7 @@ function gambarKec(){
 // format tiap baris: [lat, lon, depot_pemilik, tier, tipe_outlet]
 var NAMA_TIPE_TT = {A:'Grosir/Semi-Grosir', B:'RT-L', C:'RT-M/S'};
 var gTokoTetangga = L.layerGroup();
+var gAreaManual = L.layerGroup(); // area manual yang udah tersimpan di DB — nempel terus di peta, gak ilang abis save
 function gambarTokoTetangga(){
   gTokoTetangga.clearLayers();
   if (!D || !D.toko_tetangga || !D.toko_tetangga.length) return;
@@ -718,12 +719,13 @@ function fokusToko(i){
 }
 
 function susunUlang(){
-  [gKec,gTokoTetangga,gZona,gAtap,gOutlet].forEach(function(l){ if(l && map.hasLayer(l)) map.removeLayer(l); });
+  [gKec,gTokoTetangga,gZona,gAtap,gOutlet,gAreaManual].forEach(function(l){ if(l && map.hasLayer(l)) map.removeLayer(l); });
   if(document.getElementById('lk').checked) gKec.addTo(map);
   if(document.getElementById('ltt').checked) gTokoTetangga.addTo(map);
   if(document.getElementById('lz').checked && gZona)  gZona.addTo(map);
   if(document.getElementById('la').checked) gAtap.addTo(map);
   if(document.getElementById('lo').checked && gOutlet)gOutlet.addTo(map);
+  gAreaManual.addTo(map);
 }
 
 var MANUAL_DRAW = { active:false, points:[], svg:null, path:null };
@@ -809,6 +811,7 @@ async function selesaiGambarManual(){
     });
     if(error) throw error;
     alert('Area manual tersimpan: ' + nama);
+    await muatAreaManual();
   }catch(e){
     alert('Gagal simpan area manual: ' + e.message);
   }
@@ -835,6 +838,54 @@ document.addEventListener('mouseup', function(e){
   selesaiGambarManual();
 });
 
+function htmlAreaManualPopup(a){
+  var namaSalesAssigned = a.kode_salesman ? namaSalesDari(a.kode_salesman) : null;
+  var opts = SALES_LIST.map(function(s){ return '<option value="'+s[0]+'">'+s[1]+'</option>'; }).join('');
+  var infoAssign = namaSalesAssigned ?
+    ('<div class="pv"><i>Ditugaskan ke</i><b>'+namaSalesAssigned+'</b></div>') :
+    '<div style="font-size:11px;color:#a53838;margin:4px 0">Belum ditugaskan ke sales manapun.</div>';
+  var pilihSales = SALES_LIST.length ?
+    ('<select id="qam_'+a.id+'" style="width:100%;margin:6px 0;padding:5px;font-size:12px;"><option value="">— '+(namaSalesAssigned?'Assign sales lain':'Pilih sales')+' —</option>'+opts+'</select>'+
+     '<button class="pbtn" onclick="assignAreaManual(\''+a.id+'\')" type="button">Assign ke sini</button>') :
+    '<div style="font-size:11px;color:#a53838;margin-top:6px">Belum ada daftar sales buat depot ini.</div>';
+  return '<div class="ptitle">'+(a.name||'Area manual')+'</div>'+
+    (a.reason ? ('<div class="pv"><i>Alasan</i><b>'+a.reason+'</b></div>') : '') +
+    infoAssign + pilihSales +
+    '<a href="#" onclick="event.preventDefault();hapusAreaManual(\''+a.id+'\');" style="display:block;margin-top:8px;font-size:11px;color:#a53838;">Hapus area ini</a>';
+}
+function gambarSatuAreaManual(a){
+  if(!a.geojson) return;
+  try{
+    var lyr = L.geoJSON(a.geojson, {style:{color:'#0d6efd', weight:2.5, fillColor:'#0d6efd', fillOpacity:0.18}});
+    lyr.bindPopup(function(){ return htmlAreaManualPopup(a); });
+    lyr.addTo(gAreaManual);
+  }catch(e){ console.error('Gagal gambar area manual', a.id, e); }
+}
+async function muatAreaManual(){
+  if(!DEPOT || DEPOT === '__ALL__'){ gAreaManual.clearLayers(); return; }
+  var depotId = DEPOT.replace(/\s+/g, '_');
+  const { data, error } = await sb.from('manual_areas').select('*').eq('depot_id', depotId);
+  gAreaManual.clearLayers();
+  if(error){ console.error(error); return; }
+  (data||[]).forEach(function(a){ gambarSatuAreaManual(a); });
+}
+async function assignAreaManual(id){
+  var sel = document.getElementById('qam_'+id);
+  var kode = sel ? sel.value : '';
+  if(!kode){ alert('Pilih sales dulu'); return; }
+  const { error } = await sb.from('manual_areas').update({ kode_salesman: kode }).eq('id', id);
+  if(error){ alert('Gagal assign: ' + error.message); return; }
+  alert('Area manual berhasil di-assign ke ' + namaSalesDari(kode));
+  map.closePopup();
+  await muatAreaManual();
+}
+async function hapusAreaManual(id){
+  if(!confirm('Hapus area manual ini?')) return;
+  const { error } = await sb.from('manual_areas').delete().eq('id', id);
+  if(error){ alert('Gagal hapus: ' + error.message); return; }
+  map.closePopup();
+  await muatAreaManual();
+}
 function perbarui(){
   if(!D) return;
   var rz = gambarZona();
@@ -1385,6 +1436,7 @@ async function gantiDepot(dep){
     var c = DEPOT_MANIFEST[dep].center;
     map.setView([c[0], c[1]], 12);
     document.getElementById('depotAktifLabel').textContent = dep;
+    await muatAreaManual();
     perbarui();
     await muatSemuaDashboard();
   }catch(e){
