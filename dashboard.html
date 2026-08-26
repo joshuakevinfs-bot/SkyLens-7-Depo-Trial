@@ -747,7 +747,7 @@ async function selesaiGambarManual(){
   var oleh = (document.getElementById('inputAssignBy').value || '').trim() || 'DASHBOARD';
   try{
     const { error } = await sb.from('manual_areas').insert({
-      depot_id: DEPOT, kode_salesman: oleh, name: nama, reason: alasan, geojson: JSON.stringify(geojson)
+      depot_id: DEPOT, kode_salesman: oleh, drawn_by: crypto.randomUUID(), name: nama, reason: alasan, geojson: geojson
     });
     if(error) throw error;
     alert('Area manual tersimpan: ' + nama);

@@ -1215,9 +1215,9 @@ async function submitAreaManual(){
   btn.textContent = 'Menyimpan…';
   try{
     const { error } = await sb.from('manual_areas').insert({
-      depot_id: depotAktif, kode_salesman: kodeSalesman,
+      depot_id: depotAktif, kode_salesman: kodeSalesman, drawn_by: crypto.randomUUID(),
       name: nama, reason: alasan || null,
-      geojson: JSON.stringify(geojson)
+      geojson: geojson
     });
     if(error) throw error;
   } catch(e){
