@@ -1215,8 +1215,11 @@ async function submitAreaManual(){
 
   btn.textContent = 'Menyimpan…';
   try{
+    // FIX: kolom depot_id di manual_areas itu foreign key ke tabel master depot yang formatnya
+    // underscore ("TULUNG_AGUNG"), bukan spasi ("TULUNG AGUNG") kaya depotAktif -- sebelumnya ini
+    // yang bikin gagal simpan khusus buat depot 2 kata (TULUNG AGUNG, BANJARMASIN SELATAN)
     const { error } = await sb.from('manual_areas').insert({
-      depot_id: depotAktif, kode_salesman: kodeSalesman, drawn_by: crypto.randomUUID(),
+      depot_id: (depotAktif||'').replace(/\s+/g,'_'), kode_salesman: kodeSalesman, drawn_by: crypto.randomUUID(),
       name: nama, reason: alasan || '',
       geojson: geojson
     });

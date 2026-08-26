@@ -726,28 +726,59 @@ function susunUlang(){
   if(document.getElementById('lo').checked && gOutlet)gOutlet.addTo(map);
 }
 
-var MANUAL_DRAW = { active:false, points:[], layer:null };
+var MANUAL_DRAW = { active:false, points:[], svg:null, path:null };
+// render kurva SVG halus (quadratic bezier nyambung antar titik) — biar hasil gambar gak kotak-kotak
+// kaya versi L.polygon lama, tapi ngikutin bentuk gerakan tangan beneran (sama kaya pola lasso ULTRA_V2)
+function manualDrawGambarPath(){
+  if(!MANUAL_DRAW.path || !MANUAL_DRAW.points.length) return;
+  var cp = MANUAL_DRAW.points.map(function(ll){ return map.latLngToContainerPoint(ll); });
+  var d = 'M'+cp[0].x+' '+cp[0].y;
+  if(cp.length < 3){
+    for(var i=1;i<cp.length;i++) d += ' L'+cp[i].x+' '+cp[i].y;
+  } else {
+    for(var i=1;i<cp.length-1;i++){
+      var xc=(cp[i].x+cp[i+1].x)/2, yc=(cp[i].y+cp[i+1].y)/2;
+      d += ' Q'+cp[i].x+' '+cp[i].y+' '+xc+' '+yc;
+    }
+    d += ' L'+cp[cp.length-1].x+' '+cp[cp.length-1].y;
+  }
+  d += ' Z';
+  MANUAL_DRAW.path.setAttribute('d', d);
+}
 function mulaiGambarManual(latlng){
   MANUAL_DRAW.active = true;
   MANUAL_DRAW.points = [latlng];
-  MANUAL_DRAW.layer = L.polygon([latlng], {color:'#0d6efd', weight:2, fillColor:'#0d6efd', fillOpacity:0.18}).addTo(map);
+  var cont = map.getContainer();
+  var svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('style','position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:650');
+  var path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('fill','rgba(13,110,253,.18)');
+  path.setAttribute('stroke','#0d6efd');
+  path.setAttribute('stroke-width','3');
+  path.setAttribute('stroke-linecap','round');
+  path.setAttribute('stroke-linejoin','round');
+  svg.appendChild(path);
+  cont.appendChild(svg);
+  MANUAL_DRAW.svg = svg;
+  MANUAL_DRAW.path = path;
   document.getElementById('manualDrawStatus').style.display = 'block';
   map.dragging.disable();
+  manualDrawGambarPath();
 }
 function tambahTitikManual(latlng){
   var pts = MANUAL_DRAW.points;
   var last = pts[pts.length-1];
-  // throttle biar titiknya gak numpuk kerapetan (jarak layar minimal ~4px)
+  // throttle biar titiknya gak numpuk kerapetan (jarak layar minimal ~3px) — sama kaya pola lasso ULTRA_V2
   if(last){
     var p1 = map.latLngToContainerPoint(last), p2 = map.latLngToContainerPoint(latlng);
-    if(p1.distanceTo(p2) < 4) return;
+    if(p1.distanceTo(p2) < 3) return;
   }
   pts.push(latlng);
-  MANUAL_DRAW.layer.setLatLngs(pts);
+  manualDrawGambarPath();
 }
 function batalGambarManual(){
-  if(MANUAL_DRAW.layer) map.removeLayer(MANUAL_DRAW.layer);
-  MANUAL_DRAW = { active:false, points:[], layer:null };
+  if(MANUAL_DRAW.svg) MANUAL_DRAW.svg.remove();
+  MANUAL_DRAW = { active:false, points:[], svg:null, path:null };
   document.getElementById('manualDrawStatus').style.display = 'none';
   map.dragging.enable();
 }
@@ -768,8 +799,13 @@ async function selesaiGambarManual(){
   };
   var oleh = (document.getElementById('inputAssignBy').value || '').trim() || 'DASHBOARD';
   try{
+    if(DEPOT === '__ALL__') throw new Error('Gambar area manual gak tersedia di mode Super Admin.');
+    // FIX: kolom depot_id di tabel manual_areas itu foreign key ke tabel master depot yang makenya
+    // format underscore ("TULUNG_AGUNG"), bukan spasi ("TULUNG AGUNG") kaya DEPOT di JS sini —
+    // sebelumnya ini yang bikin gagal simpan khusus buat depot 2 kata (TULUNG AGUNG, BANJARMASIN SELATAN)
+    var depotIdBenar = DEPOT.replace(/\s+/g, '_');
     const { error } = await sb.from('manual_areas').insert({
-      depot_id: DEPOT, kode_salesman: oleh, drawn_by: crypto.randomUUID(), name: nama, reason: alasan, geojson: geojson
+      depot_id: depotIdBenar, kode_salesman: oleh, drawn_by: crypto.randomUUID(), name: nama, reason: alasan, geojson: geojson
     });
     if(error) throw error;
     alert('Area manual tersimpan: ' + nama);
