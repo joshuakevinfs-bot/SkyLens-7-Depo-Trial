@@ -103,6 +103,7 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
     <select id="depotGateSel" style="width:100%;border:1px solid #ccc;border-radius:10px;padding:12px 14px;font-size:14px;background:#fff;">
       <option value="">— Pilih depot —</option>
     </select>
+    <div style="margin-top:14px;font-size:11.5px;color:#888;">atau <a href="#" id="btnSuperAdmin" style="color:#1F3864;font-weight:600;text-decoration:underline;">masuk sebagai Super Admin</a> (lihat semua depot)</div>
   </div>
 </div>
 <div id="load">Memuat dashboard…</div>
@@ -113,9 +114,10 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
   <div class="card">
     <h1>Dashboard SkyLens — Pilot 7 Depot</h1>
     <div class="desc">Peta lengkap + assign zona ke sales + monitoring rute &amp; temuan real-time. Data model ML sudah dilatih penuh (peluang_A / est_outlet / est_tierA), bukan heuristik.</div>
-    <div class="sec"><b>Pilih depot</b>
-      <select id="depotSel" class="depotpick">
-        <option value="JAMBI">JAMBI (2093 zona — wilayah sales resmi)</option><option value="KUDUS">KUDUS (362 zona — wilayah sales resmi)</option><option value="TULUNG AGUNG">TULUNG AGUNG (532 zona — wilayah sales resmi)</option><option value="BANJARBARU">BANJARBARU (1405 zona — wilayah sales resmi)</option><option value="BANJARMASIN SELATAN">BANJARMASIN SELATAN (999 zona — wilayah sales resmi)</option><option value="KENDARI">KENDARI (1649 zona — wilayah sales resmi)</option><option value="DENPASAR">DENPASAR (540 zona — wilayah sales resmi)</option>
+    <div class="sec" id="depotAktifSec"><b>Depot aktif: <span id="depotAktifLabel">—</span></b>
+      <button class="act" id="btnGantiDepot" onclick="tampilkanGateDepot()" style="margin-top:6px;width:100%">Ganti depot / Super Admin</button>
+      <select id="depotSel" class="depotpick" style="display:none">
+        <option value="JAMBI">JAMBI</option><option value="KUDUS">KUDUS</option><option value="TULUNG AGUNG">TULUNG AGUNG</option><option value="BANJARBARU">BANJARBARU</option><option value="BANJARMASIN SELATAN">BANJARMASIN SELATAN</option><option value="KENDARI">KENDARI</option><option value="DENPASAR">DENPASAR</option>
       </select>
     </div>
     <div class="stats" id="statsRow"></div>
@@ -123,6 +125,10 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
 
   <div class="warn" id="dataGapNote">
     <b>Catatan data toko (v2):</b> identitas toko (nama/kode/rute/sales) sekarang sudah dilengkapi dari data RO P3M per depot — bisa dicari lewat kotak pencarian di panel "Saring toko". Titik dengan garis putus-putus &amp; agak pudar = belum ke-mapping identitasnya di data terbaru.
+  </div>
+
+  <div class="warn" id="superAdminBanner" style="display:none;background:#eaf1ff;border-color:#1F3864;color:#1F3864;">
+    <b>Mode SUPER ADMIN aktif</b> — semua 7 depot digabung jadi satu peta &amp; satu data. Fitur gambar area manual dan layer atap bangunan dimatiin sementara di mode ini (keduanya per-depot). Assign, progress, rute, dan temuan tetep aktif penuh lintas depot.
   </div>
 
   <div class="card">
@@ -163,7 +169,7 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
     <div id="stat"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="salesCard">
     <h2>Kelola daftar sales (per depot)</h2>
     <div class="desc">Otomatis keisi roster sales TX2 resmi (dari data RO P3M) tiap ganti depot — kalau ada yang beda/kurang, edit aja langsung di bawah. Satu baris satu sales, format <code>kode,nama</code> — atau nama doang juga boleh (kode dibikinin otomatis). Perubahan tersimpan otomatis di browser ini per depot begitu klik "Simpan daftar sales".</div>
     <textarea id="salesEditor" class="salesbox" placeholder="172048,TX2DA-LIA&#10;172043,TX2DA-RIZQI&#10;atau cuma:&#10;LIA&#10;RIKI"></textarea>
@@ -292,7 +298,9 @@ function cariFiturAtap(lng, lat, brushPx){
 // Dipakai sebagai default kalau belum ada daftar sales tersimpan di browser utk depot itu.
 const TX2_ROSTER = {"JAMBI":[["136633","TX2DA-MUHAMMAD ASRA"],["136623","TX2DA-ALAM SYAHBANI"],["136656","TX2DA-MULFI SURYA PRATAMA"]],"KUDUS":[["141023","TX2DA-M. HUSNU TSAWAB"],["141021","TX2DA-FAROUQ MUIZA ADYATMA"]],"TULUNG AGUNG":[["148213","TX2DA-ROVIQ ALI MASKURI"],["148209","TX2DA-RUDIYANTO"],["148217","TX2DA-MUHAMMAD FAIK"]],"BANJARBARU":[["172048","TX2DA-LIA"],["172043","TX2DA-RIZQI"],["172007","TX2DA-RIZQI"],["172036","TX2DA-ONGKI"]],"BANJARMASIN SELATAN":[["160219","TX2DA-MUHAMAD IRFAN"],["160201","TX2DA-FAISAL HAJIME"],["160278","TX2DA-M. ADITYA RAHMAN"],["160253","TX2DA-MUHAMMAD RIDWAN"]],"KENDARI":[["163001","TX2DA-ASWAR ANAS"],["163040","TX2DA-MUH. ZALDY WAHYU"],["163035","TX2DA-INDRA TRISEPTI SAPUTRA"],["163012","TX2DA-JUSMAN"],["163011","TX2DA-EKO SEPTIAN MOHAMAD"],["163025","TX2DA-VACANT"]],"DENPASAR":[["138615","TX2DA-VACANT"]]};
 
-let DEPOT = null;           // nama depot aktif
+let DEPOT = null;           // nama depot aktif ('__ALL__' kalau lagi mode Super Admin)
+let SUPER_ADMIN = false;    // true kalau lagi mode Super Admin (semua depot digabung)
+let KEY_PETAK_DEPOT = {};   // key_petak -> nama depot asalnya (dipakai buat insert pas Super Admin)
 let SALES_LIST = [];        // [[kode,nama],...] — diisi per depot dari localStorage
 let D = null;
 let ATAP_BARIS = null;      // cache lapisan atap depot aktif (di-reset tiap ganti depot)
@@ -323,6 +331,7 @@ async function muatSalesList(dep){
   document.getElementById('salesEditor').value = SALES_LIST.map(function(s){ return s[0]+','+s[1]; }).join('\n');
 }
 async function simpanSalesList(){
+  if(DEPOT === '__ALL__'){ alert('Gak bisa edit roster sales di mode Super Admin — pilih depot spesifik dulu lewat tombol "Ganti depot / Super Admin".'); return; }
   var txt = document.getElementById('salesEditor').value;
   var rows = txt.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
   var parsed = [];
@@ -591,7 +600,8 @@ async function quickAssign(keyPetak){
   var sel = document.getElementById('qas_'+keyPetak);
   var kode = sel ? sel.value : '';
   if(!kode){ alert('Pilih sales dulu'); return; }
-  const { error } = await sb.from('assign_pilot').insert({ kode_salesman: kode, key_petak: keyPetak, depot: DEPOT });
+  var depotIns = (DEPOT === '__ALL__') ? (KEY_PETAK_DEPOT[keyPetak] || null) : DEPOT;
+  const { error } = await sb.from('assign_pilot').insert({ kode_salesman: kode, key_petak: keyPetak, depot: depotIns });
   if(error){ alert('Gagal assign: '+error.message); return; }
   alert('Berhasil di-assign ke '+namaSalesDari(kode));
   await muatAssignedMap();
@@ -773,6 +783,7 @@ document.addEventListener('keydown', function(e){
 map.getContainer().addEventListener('contextmenu', function(e){ e.preventDefault(); });
 map.getContainer().addEventListener('mousedown', function(e){
   if(e.button !== 2) return; // cuma klik kanan
+  if(DEPOT === '__ALL__'){ alert('Gambar area manual gak tersedia di mode Super Admin — pilih depot spesifik dulu.'); return; }
   e.preventDefault();
   var latlng = map.containerPointToLatLng(map.mouseEventToContainerPoint ? map.mouseEventToContainerPoint(e) : L.DomEvent.getMousePosition(e, map.getContainer()));
   mulaiGambarManual(latlng);
@@ -1019,7 +1030,9 @@ function isiDropdownUmum(){
 // query di-scope ke daftar PILOT_KEYS milik depot yang lagi aktif.
 async function muatAssignedMap(){
   if(!DEPOT){ assignedMap = {}; assignedKodeMap = {}; assignedKeysBySales = {}; return; }
-  const { data } = await sb.from('assign_pilot').select('key_petak, kode_salesman').eq('status','aktif').eq('depot', DEPOT);
+  var qAssigned = sb.from('assign_pilot').select('key_petak, kode_salesman').eq('status','aktif');
+  if(DEPOT !== '__ALL__') qAssigned = qAssigned.eq('depot', DEPOT);
+  const { data } = await qAssigned;
   assignedMap = {}; assignedKodeMap = {}; assignedKeysBySales = {};
   (data||[]).forEach(function(a){
     assignedMap[a.key_petak] = assignedMap[a.key_petak] || [];
@@ -1035,7 +1048,8 @@ async function assignZona(){
   var keyPetak = document.getElementById('selectZona').value;
   var oleh = document.getElementById('inputAssignBy').value.trim();
   if(!kode || !keyPetak){ alert('Pilih sales dan zona dulu'); return; }
-  const { error } = await sb.from('assign_pilot').insert({ kode_salesman:kode, key_petak:parseInt(keyPetak), ditugaskan_oleh: oleh||null, depot: DEPOT });
+  var depotIns = (DEPOT === '__ALL__') ? (KEY_PETAK_DEPOT[parseInt(keyPetak)] || null) : DEPOT;
+  const { error } = await sb.from('assign_pilot').insert({ kode_salesman:kode, key_petak:parseInt(keyPetak), ditugaskan_oleh: oleh||null, depot: depotIns });
   if(error){ alert('Gagal assign: '+error.message); return; }
   document.getElementById('inputAssignBy').value='';
   await muatAssignedMap();
@@ -1055,7 +1069,9 @@ async function batalkanAssign(id){
 
 async function muatAssignTable(){
   if(!DEPOT){ document.getElementById('assignBody').innerHTML=''; document.getElementById('assignEmpty').style.display='block'; return; }
-  const { data } = await sb.from('assign_pilot').select('*').eq('status','aktif').eq('depot', DEPOT).order('tanggal_assign',{ascending:false});
+  var qAssignTbl = sb.from('assign_pilot').select('*').eq('status','aktif');
+  if(DEPOT !== '__ALL__') qAssignTbl = qAssignTbl.eq('depot', DEPOT);
+  const { data } = await qAssignTbl.order('tanggal_assign',{ascending:false});
   var tbody = document.getElementById('assignBody');
   var empty = document.getElementById('assignEmpty');
   if(!data || data.length===0){ tbody.innerHTML=''; empty.style.display='block'; return; }
@@ -1107,7 +1123,9 @@ async function muatProgressTable(){
     document.getElementById('progressBody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;font-size:10.5px;padding:14px 0">Belum ada petak yang di-assign ke sales.</td></tr>';
     return;
   }
-  const { data: progress } = await sb.from('grid_progress').select('key_petak, kode_salesman, cell_r, cell_c').eq('depot', DEPOT).in('key_petak', assignedKeys);
+  var qProgress = sb.from('grid_progress').select('key_petak, kode_salesman, cell_r, cell_c').in('key_petak', assignedKeys);
+  if(DEPOT !== '__ALL__') qProgress = qProgress.eq('depot', DEPOT);
+  const { data: progress } = await qProgress;
   var cellsByZona = {};
   (progress||[]).forEach(function(p){
     cellsByZona[p.key_petak] = cellsByZona[p.key_petak] || new Set();
@@ -1136,7 +1154,9 @@ async function muatProgressTable(){
 
 async function muatTemuanFeed(){
   if(!DEPOT){ document.getElementById('temuanBody').innerHTML=''; document.getElementById('temuanEmpty').style.display='block'; return; }
-  const { data } = await sb.from('temuan_pilot').select('*').eq('depot', DEPOT).order('tanggal',{ascending:false}).limit(30);
+  var qTemuan = sb.from('temuan_pilot').select('*');
+  if(DEPOT !== '__ALL__') qTemuan = qTemuan.eq('depot', DEPOT);
+  const { data } = await qTemuan.order('tanggal',{ascending:false}).limit(30);
   var tbody = document.getElementById('temuanBody');
   var empty = document.getElementById('temuanEmpty');
   if(!data || data.length===0){ tbody.innerHTML=''; empty.style.display='block'; return; }
@@ -1155,11 +1175,11 @@ async function muatStats(){
     document.getElementById('statsRow').innerHTML = '<div class="stat"><div class="n">0</div><div class="l">Petak di-assign</div></div><div class="stat"><div class="n">0</div><div class="l">Total temuan</div></div><div class="stat"><div class="n">0</div><div class="l">Konfirmasi grosir</div></div><div class="stat"><div class="n">0</div><div class="l">Total zona pilot</div></div>';
     return;
   }
-  const [{count:cAssign}, {count:cTemuan}, {data:grosirYa}] = await Promise.all([
-    sb.from('assign_pilot').select('*',{count:'exact',head:true}).eq('status','aktif').eq('depot', DEPOT),
-    sb.from('temuan_pilot').select('*',{count:'exact',head:true}).eq('depot', DEPOT),
-    sb.from('temuan_pilot').select('id').eq('ditemukan_grosir','ya').eq('depot', DEPOT)
-  ]);
+  var qA = sb.from('assign_pilot').select('*',{count:'exact',head:true}).eq('status','aktif');
+  var qT = sb.from('temuan_pilot').select('*',{count:'exact',head:true});
+  var qG = sb.from('temuan_pilot').select('id').eq('ditemukan_grosir','ya');
+  if(DEPOT !== '__ALL__'){ qA = qA.eq('depot', DEPOT); qT = qT.eq('depot', DEPOT); qG = qG.eq('depot', DEPOT); }
+  const [{count:cAssign}, {count:cTemuan}, {data:grosirYa}] = await Promise.all([qA, qT, qG]);
   document.getElementById('statsRow').innerHTML =
     '<div class="stat"><div class="n">'+(cAssign??0)+'</div><div class="l">Petak di-assign</div></div>'+
     '<div class="stat"><div class="n">'+(cTemuan??0)+'</div><div class="l">Total temuan</div></div>'+
@@ -1254,6 +1274,10 @@ async function gantiDepot(dep){
   document.getElementById('load').style.display='flex';
   document.getElementById('load').textContent = 'Memuat data ' + dep + '…';
   try{
+    SUPER_ADMIN = false;
+    document.getElementById('superAdminBanner').style.display = 'none';
+    document.getElementById('salesCard').style.display = '';
+    document.getElementById('la').disabled = false;
     DEPOT = dep;
     ATAP_BARIS = null;
     document.getElementById('la').checked = false;
@@ -1270,6 +1294,7 @@ async function gantiDepot(dep){
     isiDropdownUmum();
     var c = DEPOT_MANIFEST[dep].center;
     map.setView([c[0], c[1]], 12);
+    document.getElementById('depotAktifLabel').textContent = dep;
     perbarui();
     await muatSemuaDashboard();
   }catch(e){
@@ -1277,6 +1302,78 @@ async function gantiDepot(dep){
     console.error(e);
   }
   document.getElementById('load').style.display='none';
+}
+
+async function muatSalesListSemuaDepot(){
+  var depotDenganRoster = {};
+  var dariServer = [];
+  try{
+    const { data, error } = await sb.from('sales_roster').select('kode, nama, depot').order('nama');
+    if(!error && data && data.length){
+      data.forEach(function(r){ depotDenganRoster[r.depot] = true; });
+      dariServer = data.map(function(r){ return [String(r.kode), r.nama+' — '+r.depot]; });
+    }
+  }catch(e){}
+  var gabung = [];
+  Object.keys(TX2_ROSTER).forEach(function(dep){
+    if(depotDenganRoster[dep]) return; // udah ada roster kustom di server, gak usah dobel pake default TX2
+    (TX2_ROSTER[dep]||[]).forEach(function(s){ gabung.push([String(s[0]), s[1]+' — '+dep]); });
+  });
+  gabung = gabung.concat(dariServer);
+  SALES_LIST = gabung;
+  document.getElementById('salesEditor').value = SALES_LIST.map(function(s){ return s[0]+','+s[1]; }).join('\n');
+}
+
+async function masukSuperAdmin(){
+  document.getElementById('gateDepotOverlay').style.display = 'none';
+  document.getElementById('load').style.display='flex';
+  document.getElementById('load').textContent = 'Memuat semua depot (Super Admin)…';
+  try{
+    SUPER_ADMIN = true;
+    DEPOT = '__ALL__';
+    KEY_PETAK_DEPOT = {};
+    ATAP_BARIS = null;
+    document.getElementById('la').checked = false;
+    document.getElementById('la').disabled = true;
+    document.getElementById('legAtap').style.display = 'none';
+    document.getElementById('cariToko').value = '';
+    document.getElementById('hasilCari').innerHTML = '';
+    if(pmtilesAtapLayer){ if(map.hasLayer(pmtilesAtapLayer)) map.removeLayer(pmtilesAtapLayer); pmtilesAtapLayer = null; }
+    var semuaDepot = Object.keys(DEPOT_MANIFEST);
+    var hasil = await Promise.all(semuaDepot.map(function(dep){
+      return muatDataDepot(dep).then(function(d){ return {dep:dep, d:d}; });
+    }));
+    var gabungD = { S: hasil[0].d.S, zona: [], outlet: [], kec: [], toko_tetangga: [] };
+    hasil.forEach(function(h){
+      h.d.zona.forEach(function(z){ KEY_PETAK_DEPOT[hitungKeyPetak(z[2], z[3])] = h.dep; });
+      gabungD.zona = gabungD.zona.concat(h.d.zona);
+      gabungD.outlet = gabungD.outlet.concat(h.d.outlet);
+      gabungD.kec = gabungD.kec.concat(h.d.kec||[]);
+      gabungD.toko_tetangga = gabungD.toko_tetangga.concat(h.d.toko_tetangga||[]);
+    });
+    D = gabungD;
+    hitungPilotKeys();
+    hitungAllKeys();
+    gambarKec();
+    gambarTokoTetangga();
+    await muatSalesListSemuaDepot();
+    isiDropdownUmum();
+    map.setView([-2.5, 117], 5);
+    document.getElementById('depotAktifLabel').textContent = 'SEMUA DEPOT (Super Admin)';
+    document.getElementById('superAdminBanner').style.display = 'block';
+    document.getElementById('salesCard').style.display = 'none';
+    perbarui();
+    await muatSemuaDashboard();
+  }catch(e){
+    alert('Gagal masuk Super Admin: ' + e.message);
+    console.error(e);
+  }
+  document.getElementById('load').style.display='none';
+}
+
+function tampilkanGateDepot(){
+  document.getElementById('gateDepotOverlay').style.display = 'flex';
+  document.getElementById('depotGateSel').value = (DEPOT && DEPOT !== '__ALL__') ? DEPOT : '';
 }
 
 pasangKendaliStatik();
@@ -1291,6 +1388,16 @@ document.getElementById('progressSearch').addEventListener('input', renderProgre
     document.getElementById('gateDepotOverlay').style.display = 'none';
     gantiDepot(this.value);
   });
+  var btnSA = document.getElementById('btnSuperAdmin');
+  if(btnSA){
+    btnSA.addEventListener('click', function(e){
+      e.preventDefault();
+      var pw = prompt('Masukkan password Super Admin:');
+      if(pw === null) return;
+      if(pw !== '8888'){ alert('Password salah.'); return; }
+      masukSuperAdmin();
+    });
+  }
 })();
 </script>
 </body>
