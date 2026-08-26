@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="https://unpkg.com/protomaps-leaflet@5.1.0/dist/protomaps-leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1c2321}
@@ -218,7 +219,7 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
   </div>
 
   <div class="card">
-    <h2>Feed temuan terbaru</h2>
+    <h2>Feed temuan terbaru <button class="act" id="btnExportTemuan" onclick="exportTemuanExcel()" style="float:right;font-size:11px;padding:5px 10px;">Export Excel</button></h2>
     <table class="dt"><thead><tr><th>Foto</th><th>Sales</th><th>Petak</th><th>Grosir?</th><th>Catatan</th></tr></thead><tbody id="temuanBody"></tbody></table>
     <div class="empty2" id="temuanEmpty" style="display:none">Belum ada temuan masuk.</div>
   </div>
@@ -1169,6 +1170,59 @@ async function muatTemuanFeed(){
   }).join('');
 }
 function bukaFoto(url){ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').style.display='flex'; }
+
+async function exportTemuanExcel(){
+  if(!DEPOT){ alert('Pilih depot dulu.'); return; }
+  var btn = document.getElementById('btnExportTemuan');
+  var teksAsli = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Menyiapkan…';
+  try{
+    var qExport = sb.from('temuan_pilot').select('*');
+    if(DEPOT !== '__ALL__') qExport = qExport.eq('depot', DEPOT);
+    const { data, error } = await qExport.order('tanggal', {ascending:false});
+    if(error) throw error;
+    if(!data || !data.length){ alert('Belum ada data temuan buat di-export.'); return; }
+    var zonaByKey = {};
+    (D.zona||[]).forEach(function(z){ zonaByKey[hitungKeyPetak(z[2], z[3])] = z; });
+    var baris = data.map(function(t){
+      var z = zonaByKey[t.key_petak];
+      return {
+        'Tanggal': t.tanggal ? new Date(t.tanggal).toLocaleString('id-ID') : '',
+        'Depot': t.depot || '',
+        'Sales': namaSalesDari(t.kode_salesman),
+        'Kode sales': t.kode_salesman || '',
+        'Petak (key_petak)': t.key_petak,
+        'Kecamatan': z ? (z[12]||z[11]||'') : '',
+        'Status tindak lanjut': t.status_tindak_lanjut || '',
+        'Ada sales lain?': t.ditemukan_grosir === 'form_baru' ? '' : t.ditemukan_grosir,
+        'Nama toko': t.nama_toko || '',
+        'Biasanya belanja kemana': t.belanja_kemana || '',
+        'Nama toko grosir/pasar': t.nama_grosir_pasar || '',
+        'Rata belanja Nabati (Rp)': t.rata_belanja_nabati ?? '',
+        'No HP': t.no_hp || '',
+        'Jadwal kunjung lagi': t.jadwal_kunjung_lagi || '',
+        'Alasan tidak tertarik': t.alasan_tidak_tertarik || '',
+        'Catatan': t.catatan || '',
+        'Jumlah toko baru': t.jumlah_toko_baru ?? '',
+        'Latitude': t.lat ?? '',
+        'Longitude': t.lon ?? '',
+        'Akurasi GPS (m)': t.akurasi ?? '',
+        'Foto': t.foto_url || ''
+      };
+    });
+    var ws = XLSX.utils.json_to_sheet(baris);
+    ws['!cols'] = Object.keys(baris[0]).map(function(k){ return {wch: Math.min(40, Math.max(10, k.length+2))}; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Temuan');
+    var namaDepot = (DEPOT === '__ALL__') ? 'SEMUA_DEPOT' : DEPOT.replace(/\s+/g,'_');
+    var tgl = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, 'temuan_' + namaDepot + '_' + tgl + '.xlsx');
+  }catch(e){
+    alert('Gagal export: ' + e.message);
+    console.error(e);
+  }
+  btn.disabled = false; btn.textContent = teksAsli;
+}
 
 async function muatStats(){
   if(!DEPOT){

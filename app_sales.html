@@ -671,6 +671,7 @@ async function bukaZona(z){
         <tr><td style="color:#888;">Perkiraan outlet</td><td style="text-align:right;">${z.est_outlet ?? '—'}</td></tr>
         <tr><td style="color:#888;">Perkiraan Tier A</td><td style="text-align:right;">${z.est_tiera ?? z.est_tierA ?? '—'}</td></tr>
       </table>
+      <a href="https://www.google.com/maps?q=${(LAT0+LAT1)/2},${(LON0+LON1)/2}" target="_blank" style="display:block; text-align:center; margin-top:8px; padding:7px 0; background:#1a7a3c; color:#fff; border-radius:8px; font-size:12px; font-weight:600; text-decoration:none;">Buka di Google Maps</a>
     </div>`)
     .addTo(map);
 
