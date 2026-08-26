@@ -543,6 +543,9 @@ function pasangHoverKlik(lapisan, isiTooltip, isiPopup, gayaAsli, gayaSorot){
   lapisan.on('mouseout',  function(){ if(gayaAsli)  this.setStyle(gayaAsli);  });
   lapisan.on('popupopen',  function(){ this.closeTooltip(); this.unbindTooltip(); });
   lapisan.on('popupclose', function(){ this.bindTooltip(isiTooltip, {sticky:true, direction:'top', opacity:.95}); });
+  // FIX: stop klik nembus ke map -- kalau enggak, popup zona/atap/kec yang barusan kebuka langsung
+  // ketimpa sama popup generic "Buka di Google Maps" dari handler map.on('click', ...)
+  lapisan.on('click', function(e){ L.DomEvent.stopPropagation(e); });
 }
 
 function warnaZona(z){
@@ -806,12 +809,18 @@ async function selesaiGambarManual(){
     // format underscore ("TULUNG_AGUNG"), bukan spasi ("TULUNG AGUNG") kaya DEPOT di JS sini —
     // sebelumnya ini yang bikin gagal simpan khusus buat depot 2 kata (TULUNG AGUNG, BANJARMASIN SELATAN)
     var depotIdBenar = DEPOT.replace(/\s+/g, '_');
-    const { error } = await sb.from('manual_areas').insert({
+    const { data: baris, error } = await sb.from('manual_areas').insert({
       depot_id: depotIdBenar, kode_salesman: oleh, drawn_by: crypto.randomUUID(), name: nama, reason: alasan, geojson: geojson
-    });
+    }).select().single();
     if(error) throw error;
     alert('Area manual tersimpan: ' + nama);
     await muatAreaManual();
+    // FIX: biar keliatan langsung "stay" + ada info-nya, popup area yang baru aja disimpen langsung dibuka otomatis
+    if(baris && baris.id){
+      gAreaManual.eachLayer(function(lyr){
+        if(lyr.__areaId === baris.id) lyr.openPopup(lyr.getBounds().getCenter());
+      });
+    }
   }catch(e){
     alert('Gagal simpan area manual: ' + e.message);
   }
@@ -857,7 +866,9 @@ function gambarSatuAreaManual(a){
   if(!a.geojson) return;
   try{
     var lyr = L.geoJSON(a.geojson, {style:{color:'#0d6efd', weight:2.5, fillColor:'#0d6efd', fillOpacity:0.18}});
+    lyr.__areaId = a.id; // dipakai buat nyari-balik layer ini abis simpan, biar bisa auto-buka popup-nya
     lyr.bindPopup(function(){ return htmlAreaManualPopup(a); });
+    lyr.on('click', function(e){ L.DomEvent.stopPropagation(e); });
     lyr.addTo(gAreaManual);
   }catch(e){ console.error('Gagal gambar area manual', a.id, e); }
 }

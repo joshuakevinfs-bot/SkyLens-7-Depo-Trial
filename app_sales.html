@@ -576,14 +576,23 @@ async function muatDaftarZona(){
     .eq('status', 'aktif');
 
   if(error){ body.innerHTML = '<div class="empty">Gagal memuat zona: '+error.message+'</div>'; return; }
-  if(!assigns || assigns.length === 0){
+
+  // area manual (digambar bebas via dashboard, bukan petak grid biasa) yang di-assign ke sales ini —
+  // depot_id di tabel manual_areas formatnya underscore ("TULUNG_AGUNG"), beda sama depotAktif biasa
+  const { data: areaManual } = await sb
+    .from('manual_areas')
+    .select('*')
+    .eq('kode_salesman', kodeSalesman)
+    .eq('depot_id', depotAktif.replace(/\s+/g,'_'));
+
+  if((!assigns || assigns.length === 0) && (!areaManual || areaManual.length === 0)){
     body.innerHTML = '<div class="empty">Belum ada zona yang ditugaskan ke kamu. Hubungi BM/koordinator.</div>';
     return;
   }
 
   // detail zona diambil dari data lokal per depot (bukan dari tabel zona_pilot yg emang kosong/gak kepakai)
   const zonaMap = zonaByKeyUntukDepot(depotAktif);
-  zonaList = assigns.map(a => zonaMap[a.key_petak]).filter(Boolean);
+  zonaList = (assigns||[]).map(a => zonaMap[a.key_petak]).filter(Boolean);
 
   // ambil progress sweep per zona buat isi progress bar di kartu
   const { data: progress } = await sb
@@ -604,6 +613,18 @@ async function muatDaftarZona(){
       <div class="bar"><div style="width:${pct}%"></div></div>
       <div class="meta" style="margin-top:4px">${pct}% tersisir</div>`;
     div.onclick = () => bukaZona(z);
+    body.appendChild(div);
+  });
+
+  // kartu buat area manual — aksen biru biar kebedain dari petak grid biasa
+  (areaManual||[]).forEach(a => {
+    const div = document.createElement('div');
+    div.className = 'zonecard';
+    div.style.borderLeft = '4px solid #0d6efd';
+    div.innerHTML = `
+      <div class="top"><span class="name">${a.name || 'Area manual'}</span><span class="score" style="color:#0d6efd">Manual</span></div>
+      <div class="meta">${a.reason || 'Area gambar bebas dari dashboard'}</div>`;
+    div.onclick = () => bukaAreaManual(a);
     body.appendChild(div);
   });
 }
@@ -724,6 +745,49 @@ async function bukaZona(z){
   // NOTE: watchPosition-nya sendiri udah nyala dari mulaiTracking() (dipanggil pas login),
   // jalan terus lintas zona -- di sini tinggal pakai lastPos yg udah ada kalau sempat kekejar.
   if(lastPos && insideZone(lastPos.lat, lastPos.lon)){ onPosition(lastPos.lat, lastPos.lon, lastPos.acc); }
+}
+
+async function bukaAreaManual(a){
+  zonaAktif = null;
+  document.getElementById('zoneScreen').style.display = 'none';
+  document.getElementById('mapScreen').style.display = 'flex';
+  tutupSearchToko();
+  document.getElementById('zoneTitle').textContent = a.name || 'Area manual';
+  document.getElementById('zoneSub').textContent = a.reason || 'Area gambar bebas dari dashboard';
+  document.getElementById('modalZoneLabel').textContent = a.name || 'Area manual';
+
+  const areaLayer = L.geoJSON(a.geojson);
+  const bounds = areaLayer.getBounds();
+  const center = bounds.getCenter();
+  CENTER = { lat: center.lat, lon: center.lng };
+  // bukan petak grid -- gak ada sisir kotak-kotak, jadi insideZone() sengaja selalu false (NaN) biar
+  // onPosition() tetep aman jalan (nav-card jarak ke area aja yang muncul, sweep-card disembunyiin)
+  LAT0 = LAT1 = LON0 = LON1 = NaN;
+
+  map = L.map('map', { zoomControl:false, attributionControl:false }).setView([CENTER.lat, CENTER.lon], 17);
+  L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom:20 }).addTo(map);
+  L.geoJSON(a.geojson, { style:{ color:'#0d6efd', weight:2.5, fillColor:'#0d6efd', fillOpacity:0.18 } })
+    .bindPopup(`<div style="font-size:12.5px; min-width:180px;"><b>${a.name||'Area manual'}</b>${a.reason?('<br>'+a.reason):''}
+      <a href="https://www.google.com/maps?q=${center.lat},${center.lng}" target="_blank" style="display:block; text-align:center; margin-top:8px; padding:7px 0; background:#0d6efd; color:#fff; border-radius:8px; font-size:12px; font-weight:600; text-decoration:none;">Buka di Google Maps</a>
+    </div>`)
+    .addTo(map);
+
+  followMode = true;
+  document.getElementById('recenterBtn').style.display = 'none';
+  const matikanFollow = () => { followMode = false; document.getElementById('recenterBtn').style.display = 'flex'; };
+  map.on('dragstart', matikanFollow);
+  map.on('zoomstart', matikanFollow);
+
+  trailLayer = L.layerGroup().addTo(map);
+  gambarUlangSeluruhJejak();
+
+  cells = [];
+  youMarker = null;
+  cellLastT = null;
+  if(!('geolocation' in navigator)){
+    document.getElementById('disttext').textContent = 'HP ini tidak dukung GPS browser';
+  }
+  if(lastPos){ onPosition(lastPos.lat, lastPos.lon, lastPos.acc); }
 }
 
 function haversine(lat1,lon1,lat2,lon2){
