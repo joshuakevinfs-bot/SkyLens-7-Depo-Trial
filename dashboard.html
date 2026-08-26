@@ -45,6 +45,9 @@ select.depotpick{font-size:14px;font-weight:700;padding:8px;border:1.5px solid #
 .lgs{display:flex;align-items:center;gap:7px;padding:2px 0;font-size:12px}
 .lg.off{opacity:.35}
 #hint{top:12px;left:50%;transform:translateX(-50%);padding:7px 15px;font-size:12px;background:rgba(31,56,100,.92);color:#fff;max-width:80%;text-align:center}
+#manualDrawTip{bottom:16px;left:12px;padding:8px 12px;font-size:10.5px;color:#555;max-width:230px;line-height:1.5}
+#manualDrawStatus{top:56px;left:50%;transform:translateX(-50%);padding:7px 15px;font-size:11.5px;background:#1a7a3c;color:#fff;display:none;text-align:center}
+#manualDrawStatus a{color:#fff;text-decoration:underline;margin-left:8px;cursor:pointer}
 .leaflet-popup-content{margin:11px 13px;font-size:13px;line-height:1.55}
 .pv{display:flex;justify-content:space-between;gap:14px;padding:1px 0}
 .pv i{color:#666;font-style:normal}
@@ -237,6 +240,8 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
     </div>
   </div>
   <div class="floatpanel" id="hint">Klik zona atau titik toko untuk detail — pilih depot dulu di panel kiri</div>
+  <div class="floatpanel" id="manualDrawStatus">Mode gambar area manual aktif — klik buat nambah titik, klik kanan lagi buat selesai.<a onclick="batalGambarManual()">Batal</a></div>
+  <div class="floatpanel" id="manualDrawTip">Butuh nandain potensi yang belum ke-cover petak otomatis? Klik kanan di peta buat mulai gambar area manual (helicopter view) — klik kiri nambah titik, klik kanan lagi buat selesai &amp; simpan.</div>
 </div>
 
 </div>
@@ -710,6 +715,51 @@ function susunUlang(){
   if(document.getElementById('lo').checked && gOutlet)gOutlet.addTo(map);
 }
 
+var MANUAL_DRAW = { active:false, points:[], layer:null };
+function mulaiGambarManual(latlng){
+  MANUAL_DRAW.active = true;
+  MANUAL_DRAW.points = [latlng];
+  MANUAL_DRAW.layer = L.polygon([latlng], {color:'#1a7a3c', weight:2, dashArray:'6 4', fillColor:'#1a7a3c', fillOpacity:0.15}).addTo(map);
+  document.getElementById('manualDrawStatus').style.display = 'block';
+}
+function tambahTitikManual(latlng){
+  MANUAL_DRAW.points.push(latlng);
+  MANUAL_DRAW.layer.setLatLngs(MANUAL_DRAW.points);
+}
+function batalGambarManual(){
+  if(MANUAL_DRAW.layer) map.removeLayer(MANUAL_DRAW.layer);
+  MANUAL_DRAW = { active:false, points:[], layer:null };
+  document.getElementById('manualDrawStatus').style.display = 'none';
+}
+async function selesaiGambarManual(){
+  if(MANUAL_DRAW.points.length < 3){
+    alert('Minimal 3 titik dulu buat bikin area (klik kiri di peta buat nambah titik, klik kanan lagi kalau udah selesai).');
+    return;
+  }
+  var nama = prompt('Nama/keterangan area ini:');
+  if(!nama){ return; }
+  var alasan = prompt('Alasan (opsional):') || null;
+  var pts = MANUAL_DRAW.points;
+  var geojson = {
+    type: 'Polygon',
+    coordinates: [ pts.concat([pts[0]]).map(function(p){ return [p.lng, p.lat]; }) ]
+  };
+  var oleh = (document.getElementById('inputAssignBy').value || '').trim() || 'DASHBOARD';
+  try{
+    const { error } = await sb.from('manual_areas').insert({
+      depot_id: DEPOT, kode_salesman: oleh, name: nama, reason: alasan, geojson: JSON.stringify(geojson)
+    });
+    if(error) throw error;
+    alert('Area manual tersimpan: ' + nama);
+  }catch(e){
+    alert('Gagal simpan area manual: ' + e.message);
+  }
+  batalGambarManual();
+}
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && MANUAL_DRAW.active) batalGambarManual();
+});
+
 function perbarui(){
   if(!D) return;
   var rz = gambarZona();
@@ -771,6 +821,7 @@ function pasangKendaliStatik(){
     }
   });
   map.on('click', function(e){
+    if(MANUAL_DRAW.active){ tambahTitikManual(e.latlng); return; }
     var la=e.latlng.lat.toFixed(6), lo=e.latlng.lng.toFixed(6);
     if(pmtilesAtapLayer && document.getElementById('la').checked && map.getZoom()>=16){
       var f = cariFiturAtap(e.latlng.lng, e.latlng.lat, 6);
@@ -790,6 +841,11 @@ function pasangKendaliStatik(){
       '<a class="pbtn" target="_blank" href="https://www.google.com/maps?q='+la+','+lo+'">Buka di Google Maps</a>'+
       '<a class="pbtn" style="margin-top:6px" target="_blank" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint='+la+','+lo+'">Street View</a>'
     ).openOn(map);
+  });
+  map.on('contextmenu', function(e){
+    e.originalEvent.preventDefault();
+    if(!MANUAL_DRAW.active){ mulaiGambarManual(e.latlng); }
+    else { selesaiGambarManual(); }
   });
   // hover buat layer atap versi tile: kursor berubah + info singkat di panel hint (bukan highlight-warna instan
   // kayak layer lama -- itu trade-off yang udah disepakati buat versi pilot vector-tile ini)
