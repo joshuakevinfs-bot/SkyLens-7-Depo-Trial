@@ -93,6 +93,15 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
 </style>
 </head>
 <body>
+<div id="gateDepotOverlay" style="position:fixed;inset:0;z-index:3000;background:#1F3864;color:#fff;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;color:#222;border-radius:14px;padding:32px 28px;max-width:380px;width:100%;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+    <h1 style="font-size:18px;margin:0 0 6px;">SkyLens</h1>
+    <p style="font-size:12.5px;color:#666;margin:0 0 20px;">Pilih depot buat mulai</p>
+    <select id="depotGateSel" style="width:100%;border:1px solid #ccc;border-radius:10px;padding:12px 14px;font-size:14px;background:#fff;">
+      <option value="">— Pilih depot —</option>
+    </select>
+  </div>
+</div>
 <div id="load">Memuat dashboard…</div>
 <div class="appwrap">
 
@@ -336,9 +345,11 @@ async function simpanSalesList(){
       if(ins.error) throw ins.error;
     }
     isiDropdownUmum();
+    perbarui();
     alert('Daftar sales tersimpan (' + SALES_LIST.length + ' sales) — udah ke-sync ke Supabase, kebaca juga di app sales & device lain.');
   }catch(e){
     isiDropdownUmum();
+    perbarui();
     alert('Kesimpen di browser ini doang (belum sync ke server): ' + e.message + '\n\nKemungkinan akses tabel sales_roster belum di-buka Kevin.');
   }
 }
@@ -543,6 +554,9 @@ var ALL_KEYS = [];
 var zonaLayerByKey = {};
 var ZONA_SEARCH_INDEX = [];
 var assignedMap = {};
+var assignedKodeMap = {};
+var assignedKeysBySales = {};
+var ROUTE_ZONA_INDEX = [];
 
 function hitungKeyPetak(gx, gy){ return gx*100000 + gy; }
 
@@ -830,7 +844,8 @@ function bangunIndeksZona(){
     return { key: keyPetak, label: label, lower: label.toLowerCase() };
   });
 }
-function pasangZonaSearch(inputId, hiddenId, resultsId, onPilih){
+function pasangZonaSearch(inputId, hiddenId, resultsId, onPilih, getIndex){
+  getIndex = getIndex || function(){ return ZONA_SEARCH_INDEX; };
   var inp = document.getElementById(inputId);
   var hid = document.getElementById(hiddenId);
   var res = document.getElementById(resultsId);
@@ -841,7 +856,7 @@ function pasangZonaSearch(inputId, hiddenId, resultsId, onPilih){
     var q = inp.value.trim().toLowerCase();
     res.innerHTML = '';
     if(!q){ res.style.display='none'; return; }
-    var cocok = ZONA_SEARCH_INDEX.filter(function(z){ return z.lower.indexOf(q) !== -1; }).slice(0, 40);
+    var cocok = getIndex().filter(function(z){ return z.lower.indexOf(q) !== -1; }).slice(0, 40);
     if(!cocok.length){ res.style.display='none'; return; }
     res.style.display = 'block';
     cocok.forEach(function(z){
@@ -860,10 +875,25 @@ function pasangZonaSearch(inputId, hiddenId, resultsId, onPilih){
   inp.addEventListener('focus', function(){ if(inp.value.trim()) inp.dispatchEvent(new Event('input')); });
   inp.addEventListener('blur', function(){ setTimeout(function(){ res.style.display='none'; }, 200); });
 }
+function perbaruiRouteZonaIndex(){
+  var kode = document.getElementById('routeSales').value;
+  var keys = kode ? (assignedKeysBySales[kode]||[]) : [];
+  ROUTE_ZONA_INDEX = ZONA_SEARCH_INDEX.filter(function(z){ return keys.indexOf(z.key) !== -1; });
+  document.getElementById('routeZonaSearch').value = '';
+  document.getElementById('routeZona').value = '';
+  document.getElementById('routeZonaSearch').placeholder = kode ? 'Pilih dari petak yang sudah di-assign ke sales ini...' : 'Pilih sales dulu';
+  document.getElementById('routeZonaSearch').disabled = !kode;
+}
 function isiPencarianZona(){
   bangunIndeksZona();
   pasangZonaSearch('selectZonaSearch','selectZona','selectZonaResults', function(k){ fokusPetak(k); });
-  pasangZonaSearch('routeZonaSearch','routeZona','routeZonaResults', function(k){ fokusPetak(k); });
+  pasangZonaSearch('routeZonaSearch','routeZona','routeZonaResults', function(k){ fokusPetak(k); if(document.getElementById('routeSales').value) muatRute(); }, function(){ return ROUTE_ZONA_INDEX; });
+  var routeSalesEl = document.getElementById('routeSales');
+  if(routeSalesEl && !routeSalesEl.dataset.wiredScope){
+    routeSalesEl.dataset.wiredScope = '1';
+    routeSalesEl.addEventListener('change', perbaruiRouteZonaIndex);
+  }
+  perbaruiRouteZonaIndex();
 }
 function setZonaSearchValue(inputId, hiddenId, key){
   key = parseInt(key);
@@ -910,12 +940,15 @@ function isiDropdownUmum(){
 // itu grid GLOBAL (dari lat/lon asli), jadi antar depot otomatis gak akan collide selama
 // query di-scope ke daftar PILOT_KEYS milik depot yang lagi aktif.
 async function muatAssignedMap(){
-  if(!DEPOT){ assignedMap = {}; return; }
+  if(!DEPOT){ assignedMap = {}; assignedKodeMap = {}; assignedKeysBySales = {}; return; }
   const { data } = await sb.from('assign_pilot').select('key_petak, kode_salesman').eq('status','aktif').eq('depot', DEPOT);
-  assignedMap = {};
+  assignedMap = {}; assignedKodeMap = {}; assignedKeysBySales = {};
   (data||[]).forEach(function(a){
     assignedMap[a.key_petak] = assignedMap[a.key_petak] || [];
     assignedMap[a.key_petak].push(namaSalesDari(a.kode_salesman));
+    if(!assignedKodeMap[a.key_petak]) assignedKodeMap[a.key_petak] = a.kode_salesman;
+    assignedKeysBySales[a.kode_salesman] = assignedKeysBySales[a.kode_salesman] || [];
+    assignedKeysBySales[a.kode_salesman].push(a.key_petak);
   });
 }
 
@@ -950,12 +983,21 @@ async function muatAssignTable(){
   if(!data || data.length===0){ tbody.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
   tbody.innerHTML = data.map(function(a){
-    return '<tr data-key="'+a.key_petak+'"><td>'+namaSalesDari(a.kode_salesman)+'</td><td>'+a.key_petak+'</td>'+
+    return '<tr data-key="'+a.key_petak+'" data-kode="'+a.kode_salesman+'"><td>'+namaSalesDari(a.kode_salesman)+'</td><td>'+a.key_petak+'</td>'+
       '<td>'+new Date(a.tanggal_assign).toLocaleDateString('id-ID')+'</td>'+
       '<td><a href="#" onclick="event.stopPropagation();batalkanAssign(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
   }).join('');
   tbody.querySelectorAll('tr').forEach(function(tr){
-    tr.onclick = function(){ fokusPetak(tr.dataset.key); };
+    tr.onclick = function(){
+      var key = tr.dataset.key, kode = tr.dataset.kode;
+      fokusPetak(key);
+      if(kode){
+        document.getElementById('routeSales').value = kode;
+        perbaruiRouteZonaIndex();
+        setZonaSearchValue('routeZonaSearch','routeZona', key);
+        muatRute();
+      }
+    };
   });
 }
 
@@ -981,26 +1023,31 @@ function renderProgressTable(){
 }
 async function muatProgressTable(){
   if(!DEPOT){ PROGRESS_ROWS = []; document.getElementById('progressBody').innerHTML=''; return; }
-  const { data: progress } = await sb.from('grid_progress').select('key_petak, kode_salesman, cell_r, cell_c').eq('depot', DEPOT);
-  var cellsByZona = {}, salesByZona = {}, kodeByZona = {};
+  var assignedKeys = Object.keys(assignedMap).map(Number);
+  if(!assignedKeys.length){
+    PROGRESS_ROWS = [];
+    document.getElementById('progressBody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;font-size:10.5px;padding:14px 0">Belum ada petak yang di-assign ke sales.</td></tr>';
+    return;
+  }
+  const { data: progress } = await sb.from('grid_progress').select('key_petak, kode_salesman, cell_r, cell_c').eq('depot', DEPOT).in('key_petak', assignedKeys);
+  var cellsByZona = {};
   (progress||[]).forEach(function(p){
     cellsByZona[p.key_petak] = cellsByZona[p.key_petak] || new Set();
     cellsByZona[p.key_petak].add(p.cell_r+'_'+p.cell_c);
-    salesByZona[p.key_petak] = salesByZona[p.key_petak] || new Set();
-    salesByZona[p.key_petak].add(p.kode_salesman);
-    if(!kodeByZona[p.key_petak]) kodeByZona[p.key_petak] = p.kode_salesman;
   });
+  var zonaByKey = {};
+  D.zona.forEach(function(z){ zonaByKey[hitungKeyPetak(z[2], z[3])] = z; });
   var rows = [];
-  D.zona.forEach(function(z){
-    var keyPetak = hitungKeyPetak(z[2], z[3]);
+  assignedKeys.forEach(function(keyPetak){
+    var z = zonaByKey[keyPetak];
+    if(!z) return;
     var isPilot = PILOT_KEYS.indexOf(keyPetak) !== -1;
     var cellCount = (cellsByZona[keyPetak]||new Set()).size;
-    var salesSet = salesByZona[keyPetak]||new Set();
     rows.push({
       key:keyPetak, peluang:z[7], isPilot:isPilot,
       label: (z[12]||z[11]||'-') + ' — ' + keyPetak,
-      sales:[].concat([...salesSet].map(namaSalesDari)).join(', ')||'—',
-      kodeSalesPertama: kodeByZona[keyPetak] || '',
+      sales:(assignedMap[keyPetak]||[]).join(', ')||'—',
+      kodeSalesPertama: assignedKodeMap[keyPetak] || '',
       cellCount:cellCount
     });
   });
@@ -1156,7 +1203,17 @@ async function gantiDepot(dep){
 
 pasangKendaliStatik();
 document.getElementById('progressSearch').addEventListener('input', renderProgressTable);
-gantiDepot(document.getElementById('depotSel').value);
+(function pasangGateDepot(){
+  var gateSel = document.getElementById('depotGateSel');
+  gateSel.innerHTML = document.getElementById('depotSel').innerHTML;
+  gateSel.value = '';
+  gateSel.addEventListener('change', function(){
+    if(!this.value) return;
+    document.getElementById('depotSel').value = this.value;
+    document.getElementById('gateDepotOverlay').style.display = 'none';
+    gantiDepot(this.value);
+  });
+})();
 </script>
 </body>
 </html>
