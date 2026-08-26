@@ -747,6 +747,14 @@ async function bukaZona(z){
   if(lastPos && insideZone(lastPos.lat, lastPos.lon)){ onPosition(lastPos.lat, lastPos.lon, lastPos.acc); }
 }
 
+// Hash deterministik dari id area manual -> key_petak sintetis yang stabil (dipakai juga di dashboard.html,
+// HARUS PERSIS SAMA di kedua file biar dashboard bisa query rute yang benar).
+function hashKeyAreaManual(id){
+  var s = String(id), h = 0;
+  for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; }
+  return 9200000000000 + (h % 900000000);
+}
+
 async function bukaAreaManual(a){
   zonaAktif = null;
   document.getElementById('zoneScreen').style.display = 'none';
@@ -760,9 +768,11 @@ async function bukaAreaManual(a){
   const bounds = areaLayer.getBounds();
   const center = bounds.getCenter();
   CENTER = { lat: center.lat, lon: center.lng };
-  // bukan petak grid -- gak ada sisir kotak-kotak, jadi insideZone() sengaja selalu false (NaN) biar
-  // onPosition() tetep aman jalan (nav-card jarak ke area aja yang muncul, sweep-card disembunyiin)
-  LAT0 = LAT1 = LON0 = LON1 = NaN;
+  // FIX: kasih key_petak sintetis yang deterministik (bukan null lagi) biar jejak GPS selagi di area ini
+  // ke-tag konsisten & bisa dimuat lagi rutenya dari dashboard (lihat fokusAreaManual di dashboard.html)
+  zonaAktif = { key_petak: hashKeyAreaManual(a.id), kecamatan: a.name||'Area manual', kabupaten: '(area manual)', gx:0, gy:0, manual:true };
+  var sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+  LAT0 = sw.lat; LAT1 = ne.lat; LON0 = sw.lng; LON1 = ne.lng;
 
   map = L.map('map', { zoomControl:false, attributionControl:false }).setView([CENTER.lat, CENTER.lon], 17);
   L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains:['mt0','mt1','mt2','mt3'], maxZoom:20 }).addTo(map);

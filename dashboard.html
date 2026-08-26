@@ -1170,12 +1170,29 @@ async function batalkanAssignAreaManual(id){
   await muatAreaManual();
   muatAssignTable();
 }
-function fokusAreaManual(id){
+// Hash deterministik dari id area manual -> key_petak sintetis yang stabil (HARUS PERSIS SAMA
+// dengan hashKeyAreaManual() di app_sales.html biar query rute nemu titik GPS yang benar).
+function hashKeyAreaManual(id){
+  var s = String(id), h = 0;
+  for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; }
+  return 9200000000000 + (h % 900000000);
+}
+function fokusAreaManual(id, kode, nama){
   var target = null;
   gAreaManual.eachLayer(function(lyr){ if(lyr.__areaId === id) target = lyr; });
   if(!target) return;
   map.flyTo(target.getBounds().getCenter(), 16, {duration:0.6});
   setTimeout(function(){ target.openPopup(); }, 400);
+  // FIX: dulu klik baris manual cuma pan+popup doang, panel "Rute perjalanan sales" gak ikut keisi.
+  // Sekarang itung key_petak sintetis yang sama kaya di app_sales.html, isi field rute, & muat rutenya.
+  if(kode){
+    var keySintetis = hashKeyAreaManual(id);
+    document.getElementById('routeSales').value = kode;
+    perbaruiRouteZonaIndex();
+    document.getElementById('routeZona').value = keySintetis;
+    document.getElementById('routeZonaSearch').value = (nama||'Area manual') + ' (area manual)';
+    muatRute();
+  }
 }
 async function muatAssignTable(){
   if(!DEPOT){ document.getElementById('assignBody').innerHTML=''; document.getElementById('assignEmpty').style.display='block'; return; }
@@ -1199,7 +1216,7 @@ async function muatAssignTable(){
       '<td><a href="#" onclick="event.stopPropagation();batalkanAssign(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
   }).join('');
   var htmlManual = areaManualRows.map(function(a){
-    return '<tr data-type="manual" data-areaid="'+a.id+'"><td>'+namaSalesDari(a.kode_salesman)+'</td>'+
+    return '<tr data-type="manual" data-areaid="'+a.id+'" data-kode="'+(a.kode_salesman||'')+'" data-nama="'+(a.name||'Area manual').replace(/"/g,'&quot;')+'"><td>'+namaSalesDari(a.kode_salesman)+'</td>'+
       '<td>'+(a.name||'Area manual')+' <span style="font-size:9.5px;background:#e8f0ff;color:#0d6efd;padding:1px 6px;border-radius:8px;">MANUAL</span></td>'+
       '<td>'+new Date(a.created_at).toLocaleDateString('id-ID')+'</td>'+
       '<td><a href="#" onclick="event.stopPropagation();batalkanAssignAreaManual(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
@@ -1207,7 +1224,7 @@ async function muatAssignTable(){
   tbody.innerHTML = htmlGrid + htmlManual;
   tbody.querySelectorAll('tr').forEach(function(tr){
     tr.onclick = function(){
-      if(tr.dataset.type === 'manual'){ fokusAreaManual(tr.dataset.areaid); return; }
+      if(tr.dataset.type === 'manual'){ fokusAreaManual(tr.dataset.areaid, tr.dataset.kode, tr.dataset.nama); return; }
       var key = tr.dataset.key, kode = tr.dataset.kode;
       fokusPetak(key);
       if(kode){
