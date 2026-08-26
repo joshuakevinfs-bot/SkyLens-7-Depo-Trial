@@ -215,9 +215,9 @@ const OUTLET_B64 = "H4sIAC+gfGoC/7y9WZMjR5Im+Fcg9TQrSybN1O5HjwQi4BkAIoiDOZEj+5A9
     </div>
     <div class="mapwrap">
       <div id="map"></div>
-      <div class="card" id="navcard">
+      <div class="card" id="navcard" onclick="panKeZonaAktif()" style="cursor:pointer">
         <div class="arrowbox"><svg id="arrowicon" width="20" height="20" viewBox="0 0 24 24"><path d="M12 2.5 L20.5 20.5 L12 16.2 L3.5 20.5 Z" fill="var(--red)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
-        <div class="cardtext"><p class="big" id="disttext">Mencari lokasi…</p><p class="small">jarak ke pusat zona</p></div>
+        <div class="cardtext"><p class="big" id="disttext">Mencari lokasi…</p><p class="small">jarak ke pusat zona — ketuk buat lihat di peta</p></div>
       </div>
       <div class="card sweepcard" id="sweepcard">
         <div style="width:100%">
@@ -1151,6 +1151,14 @@ document.getElementById('recenterBtn').addEventListener('click', () => {
   document.getElementById('recenterBtn').style.display = 'none';
   if(lastPos){ map.panTo([lastPos.lat, lastPos.lon], { animate:true }); }
 });
+// kartu "jarak ke pusat zona" diketuk -> auto pan+zoom peta ke petak/area yang lagi dibuka,
+// biar sales gak perlu geser-geser manual buat nyari lokasinya
+function panKeZonaAktif(){
+  if(!map || !CENTER) return;
+  followMode = false;
+  document.getElementById('recenterBtn').style.display = 'flex';
+  map.flyTo([CENTER.lat, CENTER.lon], 17, { duration:0.6 });
+}
 
 function resetFormTemuan(){
   adaSalesVal = null; statusVal = null; subNantiVal = null; subTidakVal = null; photoFile = null;

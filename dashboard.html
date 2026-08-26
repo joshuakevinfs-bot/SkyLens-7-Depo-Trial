@@ -124,10 +124,6 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
     <div class="stats" id="statsRow"></div>
   </div>
 
-  <div class="warn" id="dataGapNote">
-    <b>Catatan data toko (v2):</b> identitas toko (nama/kode/rute/sales) sekarang sudah dilengkapi dari data RO P3M per depot — bisa dicari lewat kotak pencarian di panel "Saring toko". Titik dengan garis putus-putus &amp; agak pudar = belum ke-mapping identitasnya di data terbaru.
-  </div>
-
   <div class="warn" id="superAdminBanner" style="display:none;background:#eaf1ff;border-color:#1F3864;color:#1F3864;">
     <b>Mode SUPER ADMIN aktif</b> — semua 7 depot digabung jadi satu peta &amp; satu data. Fitur gambar area manual dan layer atap bangunan dimatiin sementara di mode ini (keduanya per-depot). Assign, progress, rute, dan temuan tetep aktif penuh lintas depot.
   </div>
@@ -865,7 +861,7 @@ function htmlAreaManualPopup(a){
 function gambarSatuAreaManual(a){
   if(!a.geojson) return;
   try{
-    var lyr = L.geoJSON(a.geojson, {style:{color:'#0d6efd', weight:2.5, fillColor:'#0d6efd', fillOpacity:0.18}});
+    var lyr = L.geoJSON(a.geojson, {renderer:kanvas, style:{color:'#0d6efd', weight:2.5, fillColor:'#0d6efd', fillOpacity:0.18}});
     lyr.__areaId = a.id; // dipakai buat nyari-balik layer ini abis simpan, biar bisa auto-buka popup-nya
     lyr.bindPopup(function(){ return htmlAreaManualPopup(a); });
     lyr.on('click', function(e){ L.DomEvent.stopPropagation(e); });
@@ -889,6 +885,7 @@ async function assignAreaManual(id){
   alert('Area manual berhasil di-assign ke ' + namaSalesDari(kode));
   map.closePopup();
   await muatAreaManual();
+  muatAssignTable();
 }
 async function hapusAreaManual(id){
   if(!confirm('Hapus area manual ini?')) return;
@@ -1166,22 +1163,51 @@ async function batalkanAssign(id){
   muatProgressTable();
 }
 
+async function batalkanAssignAreaManual(id){
+  if(!confirm('Batalkan assign area manual ini? (area-nya sendiri gak dihapus, cuma dilepas dari sales)')) return;
+  const { error } = await sb.from('manual_areas').update({ kode_salesman: null }).eq('id', id);
+  if(error){ alert('Gagal batalkan assign: ' + error.message); return; }
+  await muatAreaManual();
+  muatAssignTable();
+}
+function fokusAreaManual(id){
+  var target = null;
+  gAreaManual.eachLayer(function(lyr){ if(lyr.__areaId === id) target = lyr; });
+  if(!target) return;
+  map.flyTo(target.getBounds().getCenter(), 16, {duration:0.6});
+  setTimeout(function(){ target.openPopup(); }, 400);
+}
 async function muatAssignTable(){
   if(!DEPOT){ document.getElementById('assignBody').innerHTML=''; document.getElementById('assignEmpty').style.display='block'; return; }
   var qAssignTbl = sb.from('assign_pilot').select('*').eq('status','aktif');
   if(DEPOT !== '__ALL__') qAssignTbl = qAssignTbl.eq('depot', DEPOT);
   const { data } = await qAssignTbl.order('tanggal_assign',{ascending:false});
+  // area manual yang udah di-assign (bukan petak grid biasa) -- gak tersedia di mode Super Admin
+  var areaManualRows = [];
+  if(DEPOT !== '__ALL__'){
+    var depotIdBenar = DEPOT.replace(/\s+/g, '_');
+    const { data: areaManualData } = await sb.from('manual_areas').select('*').eq('depot_id', depotIdBenar).not('kode_salesman','is',null);
+    areaManualRows = areaManualData || [];
+  }
   var tbody = document.getElementById('assignBody');
   var empty = document.getElementById('assignEmpty');
-  if(!data || data.length===0){ tbody.innerHTML=''; empty.style.display='block'; return; }
+  if((!data || data.length===0) && !areaManualRows.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
-  tbody.innerHTML = data.map(function(a){
-    return '<tr data-key="'+a.key_petak+'" data-kode="'+a.kode_salesman+'"><td>'+namaSalesDari(a.kode_salesman)+'</td><td>'+a.key_petak+'</td>'+
+  var htmlGrid = (data||[]).map(function(a){
+    return '<tr data-type="petak" data-key="'+a.key_petak+'" data-kode="'+a.kode_salesman+'"><td>'+namaSalesDari(a.kode_salesman)+'</td><td>'+a.key_petak+'</td>'+
       '<td>'+new Date(a.tanggal_assign).toLocaleDateString('id-ID')+'</td>'+
       '<td><a href="#" onclick="event.stopPropagation();batalkanAssign(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
   }).join('');
+  var htmlManual = areaManualRows.map(function(a){
+    return '<tr data-type="manual" data-areaid="'+a.id+'"><td>'+namaSalesDari(a.kode_salesman)+'</td>'+
+      '<td>'+(a.name||'Area manual')+' <span style="font-size:9.5px;background:#e8f0ff;color:#0d6efd;padding:1px 6px;border-radius:8px;">MANUAL</span></td>'+
+      '<td>'+new Date(a.created_at).toLocaleDateString('id-ID')+'</td>'+
+      '<td><a href="#" onclick="event.stopPropagation();batalkanAssignAreaManual(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
+  }).join('');
+  tbody.innerHTML = htmlGrid + htmlManual;
   tbody.querySelectorAll('tr').forEach(function(tr){
     tr.onclick = function(){
+      if(tr.dataset.type === 'manual'){ fokusAreaManual(tr.dataset.areaid); return; }
       var key = tr.dataset.key, kode = tr.dataset.kode;
       fokusPetak(key);
       if(kode){
