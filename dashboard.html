@@ -82,6 +82,14 @@ table.dt td{padding:5px 4px;border-bottom:1px solid #eee}
 .desc{font-size:10.5px;color:#5b655f;margin-bottom:8px;line-height:1.5}
 .warn{background:#fff3c4;border:1px solid #d4a900;border-radius:8px;padding:8px 10px;font-size:11px;color:#7a5c00;margin-bottom:10px;line-height:1.5}
 textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid #e2dfd6;border-radius:8px;padding:8px;margin-top:4px}
+.zsearch{position:relative;flex:1}
+.zsearch input[type=text]{width:100%;box-sizing:border-box}
+.zsearch-results{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ccc;border-top:none;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 10px rgba(0,0,0,.12)}
+.zsearch-item{padding:6px 8px;font-size:11.5px;cursor:pointer;border-bottom:1px solid #f0f0f0}
+.zsearch-item:hover{background:#f3f6f2}
+#progressSearch{width:100%;box-sizing:border-box;margin-bottom:6px;padding:6px 8px;font-size:12px;border:1px solid #ccc;border-radius:6px}
+.dt tbody tr{cursor:pointer}
+.dt tbody tr:hover{background:#f3f6f2}
 </style>
 </head>
 <body>
@@ -151,11 +159,15 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
   </div>
 
   <div class="card">
-    <h2>Assign zona pilot ke sales</h2>
-    <div class="desc" id="pilotDesc">Zona pilot (kotak dengan garis tebal hitam di peta) = petak berstatus Kurang Digarap dengan peluang Tier A &ge; 40% (aturan sama persis dengan dashboard Bandung Barat). Bisa langsung klik kotaknya, atau lewat form ini.</div>
+    <h2>Assign zona ke sales</h2>
+    <div class="desc" id="pilotDesc">Semua petak bisa di-assign ke sales, gak cuma yang PILOT. Kotak dengan garis tebal hitam = zona pilot (peluang Tier A &ge; 40%, prioritas tinggi). Klik langsung kotaknya di peta, atau cari lewat form ini.</div>
     <div class="row">
       <select id="inputKodeSales"><option value="">— Pilih sales —</option></select>
-      <select id="selectZona"><option value="">— Pilih zona pilot —</option></select>
+      <div class="zsearch">
+        <input type="text" id="selectZonaSearch" placeholder="Cari petak: kecamatan / key petak..." autocomplete="off">
+        <input type="hidden" id="selectZona">
+        <div class="zsearch-results" id="selectZonaResults"></div>
+      </div>
     </div>
     <div class="row">
       <input type="text" id="inputAssignBy" placeholder="Ditugaskan oleh (nama kamu)">
@@ -166,7 +178,8 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
   </div>
 
   <div class="card">
-    <h2>Progress sweep — zona pilot</h2>
+    <h2>Progress sweep — semua petak</h2>
+    <input type="text" id="progressSearch" placeholder="Cari petak: kecamatan / key petak...">
     <table class="dt"><thead><tr><th>Petak</th><th>Skor</th><th>Sales</th><th>Progress</th></tr></thead><tbody id="progressBody"></tbody></table>
   </div>
 
@@ -175,7 +188,11 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
     <div class="desc">Breadcrumb dicatat sejak app dibuka (adaptif: tiap geser &ge;10m atau tiap ~20 detik kalau diam). Garis <b style="color:#2f6b4f">hijau</b> = ke-track beneran, garis <b style="color:#1a1a1a">hitam</b> = gap. Titik merah = berhenti &ge;5 menit di radius ~30m.</div>
     <div class="row">
       <select id="routeSales"><option value="">— Pilih sales —</option></select>
-      <select id="routeZona"><option value="">— Pilih zona —</option></select>
+      <div class="zsearch">
+        <input type="text" id="routeZonaSearch" placeholder="Cari petak: kecamatan / key petak..." autocomplete="off">
+        <input type="hidden" id="routeZona">
+        <div class="zsearch-results" id="routeZonaResults"></div>
+      </div>
     </div>
     <button class="act" onclick="muatRute()">Muat rute</button>
     <div id="routemap"></div>
@@ -268,18 +285,30 @@ let ATAP_BARIS = null;      // cache lapisan atap depot aktif (di-reset tiap gan
 
 // ===================== SALES LIST (bisa diedit user, per depot) =====================
 function kunciSales(dep){ return 'skylens_sales_v1_' + dep.replace(/\s+/g,'_'); }
-function muatSalesList(dep){
+async function muatSalesList(dep){
   var defaultRoster = (TX2_ROSTER[dep]||[]).map(function(s){ return [String(s[0]), s[1]]; });
+  SALES_LIST = defaultRoster;
   try{
-    const raw = localStorage.getItem(kunciSales(dep));
-    const parsed = raw ? JSON.parse(raw) : null;
-    // Kalau belum pernah disimpan, ATAU tersimpan tapi kosong (misal sisa dari versi lama/percobaan),
-    // jatuhkan ke roster TX2 resmi. Cuma dianggap "custom milik user" kalau isinya beneran ada.
-    SALES_LIST = (parsed && parsed.length) ? parsed : defaultRoster;
-  }catch(e){ SALES_LIST = defaultRoster; }
+    const { data, error } = await sb.from('sales_roster').select('kode, nama').eq('depot', dep).order('nama');
+    if(!error && data && data.length){
+      SALES_LIST = data.map(function(r){ return [String(r.kode), r.nama]; });
+    } else if(!error && (!data || !data.length)){
+      try{
+        const raw = localStorage.getItem(kunciSales(dep));
+        const parsed = raw ? JSON.parse(raw) : null;
+        if(parsed && parsed.length) SALES_LIST = parsed;
+      }catch(e){}
+    }
+  }catch(e){
+    try{
+      const raw = localStorage.getItem(kunciSales(dep));
+      const parsed = raw ? JSON.parse(raw) : null;
+      if(parsed && parsed.length) SALES_LIST = parsed;
+    }catch(e2){}
+  }
   document.getElementById('salesEditor').value = SALES_LIST.map(function(s){ return s[0]+','+s[1]; }).join('\n');
 }
-function simpanSalesList(){
+async function simpanSalesList(){
   var txt = document.getElementById('salesEditor').value;
   var rows = txt.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
   var parsed = [];
@@ -299,8 +328,19 @@ function simpanSalesList(){
   });
   SALES_LIST = parsed;
   localStorage.setItem(kunciSales(DEPOT), JSON.stringify(SALES_LIST));
-  isiDropdownUmum();
-  alert('Daftar sales tersimpan (' + SALES_LIST.length + ' sales) — cuma di browser ini, tiap depot punya daftar sendiri.');
+  try{
+    const del = await sb.from('sales_roster').delete().eq('depot', DEPOT);
+    if(del.error) throw del.error;
+    if(SALES_LIST.length){
+      const ins = await sb.from('sales_roster').insert(SALES_LIST.map(function(s){ return {depot:DEPOT, kode:s[0], nama:s[1]}; }));
+      if(ins.error) throw ins.error;
+    }
+    isiDropdownUmum();
+    alert('Daftar sales tersimpan (' + SALES_LIST.length + ' sales) — udah ke-sync ke Supabase, kebaca juga di app sales & device lain.');
+  }catch(e){
+    isiDropdownUmum();
+    alert('Kesimpen di browser ini doang (belum sync ke server): ' + e.message + '\n\nKemungkinan akses tabel sales_roster belum di-buka Kevin.');
+  }
 }
 function namaSalesDari(kode){
   var f = SALES_LIST.find(function(s){ return String(s[0])==String(kode); });
@@ -499,6 +539,9 @@ function rupiah(n){ return n?('Rp '+n.toLocaleString('id-ID')):'-'; }
 var gZona, gOutlet;
 var legendaMati = {};
 var PILOT_KEYS = [];
+var ALL_KEYS = [];
+var zonaLayerByKey = {};
+var ZONA_SEARCH_INDEX = [];
 var assignedMap = {};
 
 function hitungKeyPetak(gx, gy){ return gx*100000 + gy; }
@@ -509,6 +552,9 @@ function hitungPilotKeys(){
   D.zona.forEach(function(z){
     if(z[10]==='K' && z[7]>=0.40) PILOT_KEYS.push(hitungKeyPetak(z[2], z[3]));
   });
+}
+function hitungAllKeys(){
+  ALL_KEYS = D.zona.map(function(z){ return hitungKeyPetak(z[2], z[3]); });
 }
 
 function htmlAssignZona(keyPetak){
@@ -526,7 +572,7 @@ async function quickAssign(keyPetak){
   var sel = document.getElementById('qas_'+keyPetak);
   var kode = sel ? sel.value : '';
   if(!kode){ alert('Pilih sales dulu'); return; }
-  const { error } = await sb.from('assign_pilot').insert({ kode_salesman: kode, key_petak: keyPetak });
+  const { error } = await sb.from('assign_pilot').insert({ kode_salesman: kode, key_petak: keyPetak, depot: DEPOT });
   if(error){ alert('Gagal assign: '+error.message); return; }
   alert('Berhasil di-assign ke '+namaSalesDari(kode));
   await muatAssignedMap();
@@ -537,6 +583,7 @@ async function quickAssign(keyPetak){
 
 function gambarZona(){
   if(gZona) map.removeLayer(gZona);
+  zonaLayerByKey = {};
   var minB = +document.getElementById('fb').value;
   var minP = +document.getElementById('fp').value;
   var pilih = {}; document.querySelectorAll('.fz').forEach(function(c){ pilih[c.value]=c.checked; });
@@ -554,6 +601,7 @@ function gambarZona(){
     var w = warnaZona(z);
     var gaya = {color: isPilot?'#111':w, weight: isPilot?3:1, fillColor:w, fillOpacity:.32, opacity:.9};
     var r = L.rectangle(b, Object.assign({renderer:kanvas}, gaya));
+    zonaLayerByKey[keyPetak] = r;
     var nama = (z[11]||'-') + (z[12]?(' · Kec. '+z[12]):'');
     var stt  = z[10]==='K'?'Kurang digarap':(z[10]==='W'?'Whitespace':'Tergarap');
     var isiPopup = '<div class="ptitle">'+nama+(isPilot?' <span style="font-size:10px;background:#fff3c4;color:#7a5c00;padding:1px 6px;border-radius:10px;">PILOT</span>':'')+'</div>'+
@@ -774,6 +822,74 @@ function pasangKendaliStatik(){
   };
 }
 
+function bangunIndeksZona(){
+  ZONA_SEARCH_INDEX = D.zona.map(function(z){
+    var keyPetak = hitungKeyPetak(z[2], z[3]);
+    var isPilot = PILOT_KEYS.indexOf(keyPetak) !== -1;
+    var label = (z[12]||z[11]||'-') + ' — ' + keyPetak + ' (' + Math.round(z[7]*100) + '%)' + (isPilot?' · PILOT':'');
+    return { key: keyPetak, label: label, lower: label.toLowerCase() };
+  });
+}
+function pasangZonaSearch(inputId, hiddenId, resultsId, onPilih){
+  var inp = document.getElementById(inputId);
+  var hid = document.getElementById(hiddenId);
+  var res = document.getElementById(resultsId);
+  if(!inp || inp.dataset.wired) return;
+  inp.dataset.wired = '1';
+  inp.addEventListener('input', function(){
+    hid.value = '';
+    var q = inp.value.trim().toLowerCase();
+    res.innerHTML = '';
+    if(!q){ res.style.display='none'; return; }
+    var cocok = ZONA_SEARCH_INDEX.filter(function(z){ return z.lower.indexOf(q) !== -1; }).slice(0, 40);
+    if(!cocok.length){ res.style.display='none'; return; }
+    res.style.display = 'block';
+    cocok.forEach(function(z){
+      var item = document.createElement('div');
+      item.className = 'zsearch-item';
+      item.textContent = z.label;
+      item.onclick = function(){
+        hid.value = z.key;
+        inp.value = z.label;
+        res.style.display = 'none';
+        if(onPilih) onPilih(z.key);
+      };
+      res.appendChild(item);
+    });
+  });
+  inp.addEventListener('focus', function(){ if(inp.value.trim()) inp.dispatchEvent(new Event('input')); });
+  inp.addEventListener('blur', function(){ setTimeout(function(){ res.style.display='none'; }, 200); });
+}
+function isiPencarianZona(){
+  bangunIndeksZona();
+  pasangZonaSearch('selectZonaSearch','selectZona','selectZonaResults', function(k){ fokusPetak(k); });
+  pasangZonaSearch('routeZonaSearch','routeZona','routeZonaResults', function(k){ fokusPetak(k); });
+}
+function setZonaSearchValue(inputId, hiddenId, key){
+  key = parseInt(key);
+  var z = ZONA_SEARCH_INDEX.find(function(zz){ return zz.key === key; });
+  document.getElementById(hiddenId).value = key;
+  document.getElementById(inputId).value = z ? z.label : String(key);
+}
+function fokusPetak(keyPetak){
+  keyPetak = parseInt(keyPetak);
+  document.getElementById('fb').value = 0;
+  document.getElementById('vb').textContent = '0';
+  document.getElementById('fp').value = 0;
+  document.getElementById('vp').textContent = '0.00';
+  document.querySelectorAll('.fz').forEach(function(c){ c.checked = true; });
+  legendaMati = {};
+  gambarZona();
+  var layer = zonaLayerByKey[keyPetak];
+  if(layer){
+    map.flyTo(layer.getBounds().getCenter(), 17, {duration:0.6});
+    setTimeout(function(){ layer.openPopup(); }, 400);
+    return;
+  }
+  var z = D.zona.find(function(zz){ return hitungKeyPetak(zz[2],zz[3])===keyPetak; });
+  if(z) map.flyTo([z[0], z[1]], 17, {duration:0.6});
+}
+
 function isiDropdownUmum(){
   ['inputKodeSales','routeSales'].forEach(function(id){
     var sel = document.getElementById(id);
@@ -782,17 +898,11 @@ function isiDropdownUmum(){
       var o = document.createElement('option'); o.value=s[0]; o.textContent=s[1]; sel.appendChild(o);
     });
   });
-  ['selectZona','routeZona'].forEach(function(id){
-    var sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">— Pilih zona pilot —</option>';
-    D.zona.forEach(function(z){
-      var keyPetak = hitungKeyPetak(z[2], z[3]);
-      if(PILOT_KEYS.indexOf(keyPetak)===-1) return;
-      var o = document.createElement('option'); o.value=keyPetak;
-      o.textContent = (z[12]||z[11]||'-') + ' — ' + keyPetak + ' (' + Math.round(z[7]*100) + '%)';
-      sel.appendChild(o);
-    });
-  });
+  document.getElementById('selectZonaSearch').value = '';
+  document.getElementById('selectZona').value = '';
+  document.getElementById('routeZonaSearch').value = '';
+  document.getElementById('routeZona').value = '';
+  isiPencarianZona();
 }
 
 // ===================== SUPABASE — DISARING PER DEPOT LEWAT key_petak =====================
@@ -800,8 +910,8 @@ function isiDropdownUmum(){
 // itu grid GLOBAL (dari lat/lon asli), jadi antar depot otomatis gak akan collide selama
 // query di-scope ke daftar PILOT_KEYS milik depot yang lagi aktif.
 async function muatAssignedMap(){
-  if(!PILOT_KEYS.length){ assignedMap = {}; return; }
-  const { data } = await sb.from('assign_pilot').select('key_petak, kode_salesman').eq('status','aktif').in('key_petak', PILOT_KEYS);
+  if(!DEPOT){ assignedMap = {}; return; }
+  const { data } = await sb.from('assign_pilot').select('key_petak, kode_salesman').eq('status','aktif').eq('depot', DEPOT);
   assignedMap = {};
   (data||[]).forEach(function(a){
     assignedMap[a.key_petak] = assignedMap[a.key_petak] || [];
@@ -814,7 +924,7 @@ async function assignZona(){
   var keyPetak = document.getElementById('selectZona').value;
   var oleh = document.getElementById('inputAssignBy').value.trim();
   if(!kode || !keyPetak){ alert('Pilih sales dan zona dulu'); return; }
-  const { error } = await sb.from('assign_pilot').insert({ kode_salesman:kode, key_petak:parseInt(keyPetak), ditugaskan_oleh: oleh||null });
+  const { error } = await sb.from('assign_pilot').insert({ kode_salesman:kode, key_petak:parseInt(keyPetak), ditugaskan_oleh: oleh||null, depot: DEPOT });
   if(error){ alert('Gagal assign: '+error.message); return; }
   document.getElementById('inputAssignBy').value='';
   await muatAssignedMap();
@@ -833,46 +943,75 @@ async function batalkanAssign(id){
 }
 
 async function muatAssignTable(){
-  if(!PILOT_KEYS.length){ document.getElementById('assignBody').innerHTML=''; document.getElementById('assignEmpty').style.display='block'; return; }
-  const { data } = await sb.from('assign_pilot').select('*').eq('status','aktif').in('key_petak', PILOT_KEYS).order('tanggal_assign',{ascending:false});
+  if(!DEPOT){ document.getElementById('assignBody').innerHTML=''; document.getElementById('assignEmpty').style.display='block'; return; }
+  const { data } = await sb.from('assign_pilot').select('*').eq('status','aktif').eq('depot', DEPOT).order('tanggal_assign',{ascending:false});
   var tbody = document.getElementById('assignBody');
   var empty = document.getElementById('assignEmpty');
   if(!data || data.length===0){ tbody.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
   tbody.innerHTML = data.map(function(a){
-    return '<tr><td>'+namaSalesDari(a.kode_salesman)+'</td><td>'+a.key_petak+'</td>'+
+    return '<tr data-key="'+a.key_petak+'"><td>'+namaSalesDari(a.kode_salesman)+'</td><td>'+a.key_petak+'</td>'+
       '<td>'+new Date(a.tanggal_assign).toLocaleDateString('id-ID')+'</td>'+
-      '<td><a href="#" onclick="batalkanAssign(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
+      '<td><a href="#" onclick="event.stopPropagation();batalkanAssign(\''+a.id+'\');return false;" style="color:#a53838;font-size:10.5px;">Batal</a></td></tr>';
   }).join('');
+  tbody.querySelectorAll('tr').forEach(function(tr){
+    tr.onclick = function(){ fokusPetak(tr.dataset.key); };
+  });
 }
 
+var PROGRESS_ROWS = [];
+function renderProgressTable(){
+  var q = (document.getElementById('progressSearch').value||'').trim().toLowerCase();
+  var rows = !q ? PROGRESS_ROWS : PROGRESS_ROWS.filter(function(r){ return r.label.toLowerCase().indexOf(q)!==-1; });
+  var tampil = rows.slice(0, 300);
+  document.getElementById('progressBody').innerHTML = tampil.map(function(r){
+    return '<tr data-key="'+r.key+'" data-kode="'+(r.kodeSalesPertama||'')+'"><td>'+r.label+(r.isPilot?' <span style="font-size:9px;background:#fff3c4;color:#7a5c00;padding:0 4px;border-radius:8px;">PILOT</span>':'')+'</td><td>'+Math.round(r.peluang*100)+'%</td><td>'+r.sales+'</td><td>'+r.cellCount+'/16</td></tr>';
+  }).join('') + (rows.length>300 ? '<tr><td colspan="4" style="text-align:center;color:#888;font-size:10.5px">... '+(rows.length-300)+' petak lagi, ketik di kotak cari buat nyempitin</td></tr>' : '');
+  document.querySelectorAll('#progressBody tr[data-key]').forEach(function(tr){
+    tr.onclick = function(){
+      var key = tr.dataset.key, kode = tr.dataset.kode;
+      fokusPetak(key);
+      if(kode){
+        document.getElementById('routeSales').value = kode;
+        setZonaSearchValue('routeZonaSearch','routeZona', key);
+        muatRute();
+      }
+    };
+  });
+}
 async function muatProgressTable(){
-  if(!PILOT_KEYS.length){ document.getElementById('progressBody').innerHTML=''; return; }
-  const { data: progress } = await sb.from('grid_progress').select('key_petak, kode_salesman, cell_r, cell_c').in('key_petak', PILOT_KEYS);
-  var cellsByZona = {}, salesByZona = {};
+  if(!DEPOT){ PROGRESS_ROWS = []; document.getElementById('progressBody').innerHTML=''; return; }
+  const { data: progress } = await sb.from('grid_progress').select('key_petak, kode_salesman, cell_r, cell_c').eq('depot', DEPOT);
+  var cellsByZona = {}, salesByZona = {}, kodeByZona = {};
   (progress||[]).forEach(function(p){
     cellsByZona[p.key_petak] = cellsByZona[p.key_petak] || new Set();
     cellsByZona[p.key_petak].add(p.cell_r+'_'+p.cell_c);
     salesByZona[p.key_petak] = salesByZona[p.key_petak] || new Set();
     salesByZona[p.key_petak].add(p.kode_salesman);
+    if(!kodeByZona[p.key_petak]) kodeByZona[p.key_petak] = p.kode_salesman;
   });
   var rows = [];
   D.zona.forEach(function(z){
     var keyPetak = hitungKeyPetak(z[2], z[3]);
-    if(PILOT_KEYS.indexOf(keyPetak)===-1) return;
+    var isPilot = PILOT_KEYS.indexOf(keyPetak) !== -1;
     var cellCount = (cellsByZona[keyPetak]||new Set()).size;
     var salesSet = salesByZona[keyPetak]||new Set();
-    rows.push({ key:keyPetak, peluang:z[7], sales:[].concat([...salesSet].map(namaSalesDari)).join(', ')||'—', cellCount:cellCount });
+    rows.push({
+      key:keyPetak, peluang:z[7], isPilot:isPilot,
+      label: (z[12]||z[11]||'-') + ' — ' + keyPetak,
+      sales:[].concat([...salesSet].map(namaSalesDari)).join(', ')||'—',
+      kodeSalesPertama: kodeByZona[keyPetak] || '',
+      cellCount:cellCount
+    });
   });
   rows.sort(function(a,b){ return b.peluang-a.peluang; });
-  document.getElementById('progressBody').innerHTML = rows.map(function(r){
-    return '<tr><td>'+r.key+'</td><td>'+Math.round(r.peluang*100)+'%</td><td>'+r.sales+'</td><td>'+r.cellCount+'/16</td></tr>';
-  }).join('');
+  PROGRESS_ROWS = rows;
+  renderProgressTable();
 }
 
 async function muatTemuanFeed(){
-  if(!PILOT_KEYS.length){ document.getElementById('temuanBody').innerHTML=''; document.getElementById('temuanEmpty').style.display='block'; return; }
-  const { data } = await sb.from('temuan_pilot').select('*').in('key_petak', PILOT_KEYS).order('tanggal',{ascending:false}).limit(30);
+  if(!DEPOT){ document.getElementById('temuanBody').innerHTML=''; document.getElementById('temuanEmpty').style.display='block'; return; }
+  const { data } = await sb.from('temuan_pilot').select('*').eq('depot', DEPOT).order('tanggal',{ascending:false}).limit(30);
   var tbody = document.getElementById('temuanBody');
   var empty = document.getElementById('temuanEmpty');
   if(!data || data.length===0){ tbody.innerHTML=''; empty.style.display='block'; return; }
@@ -887,17 +1026,17 @@ async function muatTemuanFeed(){
 function bukaFoto(url){ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').style.display='flex'; }
 
 async function muatStats(){
-  if(!PILOT_KEYS.length){
-    document.getElementById('statsRow').innerHTML = '<div class="stat"><div class="n">0</div><div class="l">Zona pilot di-assign</div></div><div class="stat"><div class="n">0</div><div class="l">Total temuan</div></div><div class="stat"><div class="n">0</div><div class="l">Konfirmasi grosir</div></div><div class="stat"><div class="n">0</div><div class="l">Total zona pilot</div></div>';
+  if(!DEPOT){
+    document.getElementById('statsRow').innerHTML = '<div class="stat"><div class="n">0</div><div class="l">Petak di-assign</div></div><div class="stat"><div class="n">0</div><div class="l">Total temuan</div></div><div class="stat"><div class="n">0</div><div class="l">Konfirmasi grosir</div></div><div class="stat"><div class="n">0</div><div class="l">Total zona pilot</div></div>';
     return;
   }
   const [{count:cAssign}, {count:cTemuan}, {data:grosirYa}] = await Promise.all([
-    sb.from('assign_pilot').select('*',{count:'exact',head:true}).eq('status','aktif').in('key_petak', PILOT_KEYS),
-    sb.from('temuan_pilot').select('*',{count:'exact',head:true}).in('key_petak', PILOT_KEYS),
-    sb.from('temuan_pilot').select('id').eq('ditemukan_grosir','ya').in('key_petak', PILOT_KEYS)
+    sb.from('assign_pilot').select('*',{count:'exact',head:true}).eq('status','aktif').eq('depot', DEPOT),
+    sb.from('temuan_pilot').select('*',{count:'exact',head:true}).eq('depot', DEPOT),
+    sb.from('temuan_pilot').select('id').eq('ditemukan_grosir','ya').eq('depot', DEPOT)
   ]);
   document.getElementById('statsRow').innerHTML =
-    '<div class="stat"><div class="n">'+(cAssign??0)+'</div><div class="l">Zona pilot di-assign</div></div>'+
+    '<div class="stat"><div class="n">'+(cAssign??0)+'</div><div class="l">Petak di-assign</div></div>'+
     '<div class="stat"><div class="n">'+(cTemuan??0)+'</div><div class="l">Total temuan</div></div>'+
     '<div class="stat"><div class="n">'+((grosirYa||[]).length)+'</div><div class="l">Konfirmasi grosir</div></div>'+
     '<div class="stat"><div class="n">'+PILOT_KEYS.length+'</div><div class="l">Total zona pilot</div></div>';
@@ -999,9 +1138,10 @@ async function gantiDepot(dep){
     if(pmtilesAtapLayer){ if(map.hasLayer(pmtilesAtapLayer)) map.removeLayer(pmtilesAtapLayer); pmtilesAtapLayer = null; }
     D = await muatDataDepot(dep);
     hitungPilotKeys();
+    hitungAllKeys();
     gambarKec();
     gambarTokoTetangga();
-    muatSalesList(dep);
+    await muatSalesList(dep);
     isiDropdownUmum();
     var c = DEPOT_MANIFEST[dep].center;
     map.setView([c[0], c[1]], 12);
@@ -1015,6 +1155,7 @@ async function gantiDepot(dep){
 }
 
 pasangKendaliStatik();
+document.getElementById('progressSearch').addEventListener('input', renderProgressTable);
 gantiDepot(document.getElementById('depotSel').value);
 </script>
 </body>
