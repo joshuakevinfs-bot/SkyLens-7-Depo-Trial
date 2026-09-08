@@ -217,8 +217,10 @@ textarea.salesbox{width:100%;min-height:90px;font-size:11.5px;font-family:ui-mon
       <label><input type="checkbox" id="lk" checked><span class="sw" style="background:#fff;border:2px solid #c0392b"></span>Batas kecamatan</label>
       <label><input type="checkbox" id="ltt"><span class="dot" style="background:#fff;border:1.5px solid #2c3e50"></span>Toko depot tetangga (perbatasan)</label>
       <label><input type="checkbox" id="ls" onchange="gambarTemuanStarDiPeta();simpanLayerMemory()">⭐ Hasil temuan NOO (300 terbaru)</label>
-      <label><input type="checkbox" id="lg" onchange="perbaruiGridSisirBesar();simpanLayerMemory()">🧩 Progress sisir per petak (grid 16 + jejak) — perlu zoom dekat</label>
+      <label><input type="checkbox" id="lg" onchange="perbaruiGridSisirBesar();simpanLayerMemory()">🧩 Progress sisir per petak (grid 16) — perlu zoom dekat</label>
       <div id="hintGridSisir" style="font-size:10.5px;color:#a53838;margin-top:2px"></div>
+      <label><input type="checkbox" id="ljejak" checked onchange="perbaruiJejakBesar();simpanLayerMemory()">📍 Jejak GPS sales (peta besar) — garis teal</label>
+      <div id="hintJejakBesar" style="font-size:10.5px;color:#a53838;margin-top:2px"></div>
     </div>
     <div class="sec" id="secSaringZona"><b>Saring zona</b>
       <label><input type="checkbox" class="fz" value="K" checked>Kurang digarap</label>
@@ -614,56 +616,111 @@ var gBreadcrumbBesar = L.layerGroup(); // breadcrumb GPS di atas grid16, di peta
 var ZOOM_GRID_MIN = 15;
 var _debounceGridSisir = null;
 async function perbaruiGridSisirBesar(){
-  gGridSisir.clearLayers();
-  gBreadcrumbBesar.clearLayers();
-  var cb = document.getElementById('lg');
   var hintEl = document.getElementById('hintGridSisir');
-  if(!cb || !cb.checked){ if(hintEl) hintEl.textContent=''; return; }
-  if(!DEPOT || !D || !D.zona){ return; }
-  if(map.getZoom() < ZOOM_GRID_MIN){
-    if(hintEl) hintEl.textContent = 'Perbesar peta (zoom >= '+ZOOM_GRID_MIN+') buat liat grid 16 + jejaknya.';
-    return;
-  }
-  if(hintEl) hintEl.textContent = '';
-  var bounds = map.getBounds();
-  var assignedKeys = Object.keys(assignedMap).map(Number);
-  var GRID_N_BESAR = 4;
-  var visibleKeys = assignedKeys.filter(function(k){
-    var z = ZONA_BY_KEY[k];
-    if(!z) return false;
-    var lat0=Math.floor(z[0]/D.S)*D.S, lon0=Math.floor(z[1]/D.S)*D.S;
-    return bounds.intersects(L.latLngBounds([lat0,lon0],[lat0+D.S,lon0+D.S]));
-  });
-  visibleKeys.forEach(function(k){
-    var z = ZONA_BY_KEY[k];
-    var lat0=Math.floor(z[0]/D.S)*D.S, lon0=Math.floor(z[1]/D.S)*D.S;
-    var cellLat=D.S/GRID_N_BESAR, cellLon=D.S/GRID_N_BESAR;
-    var covered = GRID_PROGRESS_BY_KEY[k] || new Set();
-    for(var r=0;r<GRID_N_BESAR;r++){
-      for(var c=0;c<GRID_N_BESAR;c++){
-        var sudah = covered.has(r+'_'+c);
-        var b = [[lat0+r*cellLat, lon0+c*cellLon],[lat0+(r+1)*cellLat, lon0+(c+1)*cellLon]];
-        L.rectangle(b, {pane:'paneGridSisir', renderer:kanvasGridSisir, color: sudah?'#00BFA5':'#8a8a8a',
-          weight:1, fillColor: sudah?'#00BFA5':'transparent', fillOpacity: sudah?0.35:0,
-          dashArray: sudah?null:'3,3', interactive:false}).addTo(gGridSisir);
-      }
-    }
-  });
-  if(!assignedKeys.length) return;
   try{
-    const { data: jejak } = await sb.from('jejak_lokasi').select('key_petak,lat,lon,waktu').in('key_petak', assignedKeys).order('waktu',{ascending:true}).limit(20000);
-    var byKey = {};
-    (jejak||[]).forEach(function(p){ (byKey[p.key_petak] = byKey[p.key_petak]||[]).push(p); });
-    Object.keys(byKey).forEach(function(k){
-      var latlngs = byKey[k].map(function(p){ return [p.lat,p.lon]; });
-      if(latlngs.length>1) L.polyline(latlngs, {pane:'paneBreadcrumbBesar', color:'#1F3864', weight:3, opacity:0.9, interactive:false, smoothFactor:0}).addTo(gBreadcrumbBesar);
-      if(latlngs.length) L.circleMarker(latlngs[latlngs.length-1], {pane:'paneBreadcrumbBesar', radius:5, color:'#fff', weight:2, fillColor:'#1F3864', fillOpacity:1}).addTo(gBreadcrumbBesar);
+    gGridSisir.clearLayers();
+    var cb = document.getElementById('lg');
+    if(!cb || !cb.checked){ if(hintEl) hintEl.textContent=''; return; }
+    if(!DEPOT || !D || !D.zona){ return; }
+    if(map.getZoom() < ZOOM_GRID_MIN){
+      if(hintEl) hintEl.textContent = 'Perbesar peta (zoom >= '+ZOOM_GRID_MIN+') buat liat grid 16.';
+      return;
+    }
+    if(hintEl) hintEl.textContent = '';
+    var bounds = map.getBounds();
+    var assignedKeys = Object.keys(assignedMap).map(Number);
+    var GRID_N_BESAR = 4;
+    var visibleKeys = assignedKeys.filter(function(k){
+      var z = ZONA_BY_KEY[k];
+      if(!z) return false;
+      var lat0=Math.floor(z[0]/D.S)*D.S, lon0=Math.floor(z[1]/D.S)*D.S;
+      return bounds.intersects(L.latLngBounds([lat0,lon0],[lat0+D.S,lon0+D.S]));
     });
-  }catch(e){ console.error('gagal muat breadcrumb grid16', e); }
+    visibleKeys.forEach(function(k){
+      var z = ZONA_BY_KEY[k];
+      var lat0=Math.floor(z[0]/D.S)*D.S, lon0=Math.floor(z[1]/D.S)*D.S;
+      var cellLat=D.S/GRID_N_BESAR, cellLon=D.S/GRID_N_BESAR;
+      var covered = GRID_PROGRESS_BY_KEY[k] || new Set();
+      for(var r=0;r<GRID_N_BESAR;r++){
+        for(var c=0;c<GRID_N_BESAR;c++){
+          var sudah = covered.has(r+'_'+c);
+          var b = [[lat0+r*cellLat, lon0+c*cellLon],[lat0+(r+1)*cellLat, lon0+(c+1)*cellLon]];
+          L.rectangle(b, {pane:'paneGridSisir', renderer:kanvasGridSisir, color: sudah?'#00BFA5':'#8a8a8a',
+            weight:1, fillColor: sudah?'#00BFA5':'transparent', fillOpacity: sudah?0.35:0,
+            dashArray: sudah?null:'3,3', interactive:false}).addTo(gGridSisir);
+        }
+      }
+    });
+  }catch(eGrid){
+    console.error('perbaruiGridSisirBesar error', eGrid);
+    if(hintEl) hintEl.textContent = 'Gagal gambar grid 16: ' + eGrid.message;
+  }
 }
 function perbaruiGridSisirBesarDebounced(){
   if(_debounceGridSisir) clearTimeout(_debounceGridSisir);
   _debounceGridSisir = setTimeout(perbaruiGridSisirBesar, 350);
+}
+// Helper: tarik SEMUA baris dari Supabase lewat pagination (.range()), ngakalin batas
+// "Max Rows" bawaan server (defaultnya 1000) yang gak bisa dilawan cuma pake .limit() gede.
+// buatQuery: function() yang balikin query builder BARU tiap dipanggil (query builder Supabase
+// cuma bisa dipake sekali abis di-await).
+async function ambilSemuaBaris(buatQuery, pageSize){
+  pageSize = pageSize || 1000;
+  var semua = [];
+  var from = 0;
+  while(true){
+    var { data, error } = await buatQuery().range(from, from + pageSize - 1);
+    if(error) throw error;
+    if(!data || !data.length) break;
+    semua = semua.concat(data);
+    if(data.length < pageSize) break; // udah halaman terakhir
+    from += pageSize;
+    if(semua.length > 300000) break; // jaga-jaga biar gak infinite loop kalo ada yang aneh
+  }
+  return semua;
+}
+var _debounceJejakBesar = null;
+async function perbaruiJejakBesar(){
+  var hintJejakEl = document.getElementById('hintJejakBesar');
+  try{
+    gBreadcrumbBesar.clearLayers();
+    var cb = document.getElementById('ljejak');
+    if(hintJejakEl) hintJejakEl.textContent = '';
+    if(!cb || !cb.checked) return;
+    if(!DEPOT || !D || !D.zona) return;
+    var assignedKeys = Object.keys(assignedMap).map(Number);
+    if(!assignedKeys.length) return;
+    var jejak = await ambilSemuaBaris(function(){
+      return sb.from('jejak_lokasi').select('key_petak,lat,lon,waktu').in('key_petak', assignedKeys).order('waktu',{ascending:true});
+    });
+    var byKey = {};
+    (jejak||[]).forEach(function(p){ (byKey[p.key_petak] = byKey[p.key_petak]||[]).push(p); });
+    var totalGaris = 0;
+    Object.keys(byKey).forEach(function(k){
+      var latlngs = byKey[k].map(function(p){ return [p.lat,p.lon]; });
+      if(latlngs.length>1){
+        // casing putih dulu (bawah), baru garis teal terang (atas) -- biar kebaca di atas satelit
+        // yang gelap maupun terang. Warnanya sengaja disamain sama peta kecil di card Rute.
+        L.polyline(latlngs, {pane:'paneBreadcrumbBesar', renderer:kanvasJejakBesar, color:'#ffffff', weight:7, opacity:0.85, interactive:false, smoothFactor:0}).addTo(gBreadcrumbBesar);
+        L.polyline(latlngs, {pane:'paneBreadcrumbBesar', renderer:kanvasJejakBesar, color:'#00BFA5', weight:4, opacity:1, interactive:false, smoothFactor:0}).addTo(gBreadcrumbBesar);
+        totalGaris++;
+      }
+      if(latlngs.length) L.circleMarker(latlngs[latlngs.length-1], {pane:'paneBreadcrumbBesar', renderer:kanvasJejakBesar, radius:6, color:'#fff', weight:2, fillColor:'#1F3864', fillOpacity:1, interactive:false}).addTo(gBreadcrumbBesar);
+    });
+    if(hintJejakEl){
+      hintJejakEl.style.color = '#6b7280';
+      hintJejakEl.textContent = (jejak||[]).length
+        ? ('jejak: ' + (jejak||[]).length + ' titik (lengkap, semua halaman) · ' + totalGaris + ' rute')
+        : 'jejak: belum ada data GPS buat petak yang di-assign';
+    }
+  }catch(e){
+    console.error('gagal muat jejak peta besar', e);
+    if(hintJejakEl){ hintJejakEl.style.color = '#a53838'; hintJejakEl.textContent = 'Gagal muat jejak: ' + (e && e.message ? e.message : e); }
+  }
+}
+function perbaruiJejakBesarDebounced(){
+  if(_debounceJejakBesar) clearTimeout(_debounceJejakBesar);
+  _debounceJejakBesar = setTimeout(perbaruiJejakBesar, 350);
 }
 function gambarTokoTetangga(){
   gTokoTetangga.clearLayers();
@@ -688,6 +745,7 @@ map.createPane('paneBreadcrumbBesar'); map.getPane('paneBreadcrumbBesar').style.
 map.createPane('paneAreaManual'); map.getPane('paneAreaManual').style.zIndex = 470;
 map.createPane('paneOutletAsIs'); map.getPane('paneOutletAsIs').style.zIndex = 480;
 var kanvasGridSisir = L.canvas({pane:'paneGridSisir', padding:0.5});
+var kanvasJejakBesar = L.canvas({pane:'paneBreadcrumbBesar', padding:0.5});
 var kanvasAreaManual = L.svg({pane:'paneAreaManual'});
 var kanvasOutletAsIs = L.svg({pane:'paneOutletAsIs'});
 
@@ -911,6 +969,7 @@ function susunUlang(){
   gGridSisir.addTo(map);
   gBreadcrumbBesar.addTo(map);
   map.on('moveend zoomend', perbaruiGridSisirBesarDebounced);
+  map.on('moveend zoomend', perbaruiJejakBesarDebounced);
 }
 
 var MANUAL_DRAW = { active:false, points:[], svg:null, path:null };
@@ -1112,7 +1171,7 @@ function perbarui(){
     'Toko tampil: <span>'+(ro.A+ro.B+ro.C).toLocaleString('id-ID')+'</span> (A '+ro.A+' · B '+ro.B+' · C '+ro.C+')';
 }
 
-var LAYER_MEMORY_KEYS = ['lz','lo','la','ltt','ls','lg'];
+var LAYER_MEMORY_KEYS = ['lz','lo','la','ltt','ls','lg','ljejak'];
 function simpanLayerMemory(){
   try{
     var state = {};
@@ -1516,7 +1575,8 @@ async function muatProgressTable(){
   D.zona.forEach(function(z){ zonaByKey[hitungKeyPetak(z[2], z[3])] = z; });
   GRID_PROGRESS_BY_KEY = cellsByZona;
   ZONA_BY_KEY = zonaByKey;
-  perbaruiGridSisirBesar();
+  perbaruiGridSisirBesar().catch(function(e){ console.error('perbaruiGridSisirBesar unhandled', e); });
+  perbaruiJejakBesar().catch(function(e){ console.error('perbaruiJejakBesar unhandled', e); });
   var rows = [];
   assignedKeys.forEach(function(keyPetak){
     var z = zonaByKey[keyPetak];
@@ -1651,7 +1711,7 @@ async function buatReportWA(){
     }));
     var kolom = items.length <= 2 ? items.length : 2;
     var baris = Math.ceil(items.length / kolom);
-    var CELL_W = 360, CELL_H = 360, CAP_H = 150, PAD = 16, HEADER_H = 70;
+    var CELL_W = 360, CELL_H = 360, CAP_H = 170, PAD = 16, HEADER_H = 70;
     var canvas = document.createElement('canvas');
     canvas.width = kolom * CELL_W + PAD * (kolom+1);
     canvas.height = HEADER_H + baris * (CELL_H + CAP_H + PAD) + PAD;
@@ -1684,14 +1744,28 @@ async function buatReportWA(){
       var reasonText = '-';
       if(t.status_tindak_lanjut === 'nanti_dikunjungi') reasonText = JADWAL_LABEL[t.jadwal_kunjung_lagi] || '-';
       else if(t.status_tindak_lanjut === 'tidak_tertarik') reasonText = ALASAN_LABEL[t.alasan_tidak_tertarik] || '-';
+      var extraLabel = null, extraText = '-';
+      if(t.status_tindak_lanjut === 'nanti_dikunjungi'){
+        extraLabel = 'Rencana kunjung';
+        if(t.tanggal){
+          var hariTambah = t.jadwal_kunjung_lagi === '2_minggu' ? 14 : 7;
+          var tglRencana = new Date(t.tanggal); tglRencana.setDate(tglRencana.getDate() + hariTambah);
+          extraText = tglRencana.toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'});
+        }
+      } else if(t.status_tindak_lanjut === 'tidak_tertarik' && t.alasan_tidak_tertarik === 'grosir_saja'){
+        extraLabel = 'Grosir langganan';
+        extraText = t.nama_grosir_pasar || '-';
+      }
+      var hasil = hasilNOOInfo(t);
       ctx.fillStyle = '#1c2321'; ctx.font = 'bold 15px sans-serif';
-      ctx.fillText((t.nama_toko || 'Temuan').slice(0,32), x+10, capY);
+      ctx.fillText(((hasil && hasil.emoji === '🌟' ? hasil.emoji+' ' : '') + (t.nama_toko || 'Temuan')).slice(0,32), x+10, capY);
       ctx.font='12px sans-serif'; ctx.fillStyle='#555';
       ctx.fillText('Sales/ASS: ' + namaSalesDari(t.kode_salesman), x+10, capY+20);
       ctx.fillText(('Kel/Kec: ' + namaZonaDariKey(t.key_petak)).slice(0,42), x+10, capY+37);
       ctx.fillText('Status: ' + (STATUS_LABEL[t.status_tindak_lanjut] || '-'), x+10, capY+54);
       ctx.fillText('Reason: ' + reasonText, x+10, capY+71);
-      ctx.fillText('Avg Belanja: ' + (t.rata_belanja_nabati!=null ? rupiah(t.rata_belanja_nabati) : '-'), x+10, capY+88);
+      if(extraLabel) ctx.fillText(extraLabel + ': ' + extraText, x+10, capY+88);
+      ctx.fillText('Avg Belanja: ' + (t.rata_belanja_nabati!=null ? rupiah(t.rata_belanja_nabati) : '-'), x+10, capY+105);
     });
     var dataUrl;
     try{ dataUrl = canvas.toDataURL('image/png'); }
@@ -1883,21 +1957,30 @@ async function muatRute(){
   var empty = document.getElementById('routeEmpty');
   var mapDiv = document.getElementById('routemap');
   if(!kode || !keyPetak){ alert('Pilih sales dan zona dulu'); return; }
-  const { data: patok, error: errPatok } = await sb.from('jejak_lokasi')
+  const { data: patokAwal } = await sb.from('jejak_lokasi')
     .select('waktu').eq('kode_salesman', kode).eq('key_petak', keyPetak)
-    .order('waktu', {ascending:true});
-  if(errPatok || !patok || patok.length===0){
+    .order('waktu', {ascending:true}).limit(1);
+  const { data: patokAkhir } = await sb.from('jejak_lokasi')
+    .select('waktu').eq('kode_salesman', kode).eq('key_petak', keyPetak)
+    .order('waktu', {ascending:false}).limit(1);
+  if(!patokAwal || !patokAwal.length || !patokAkhir || !patokAkhir.length){
     empty.style.display='block'; empty.textContent='Belum ada data GPS buat kombinasi ini.';
     mapDiv.style.display='none'; return;
   }
   const JENDELA_MS = 3*60*60*1000;
-  const mulai   = new Date(new Date(patok[0].waktu).getTime() - JENDELA_MS).toISOString();
-  const selesai = new Date(new Date(patok[patok.length-1].waktu).getTime() + JENDELA_MS).toISOString();
-  const { data, error } = await sb.from('jejak_lokasi')
-    .select('*').eq('kode_salesman', kode).eq('key_petak', keyPetak)
-    .gte('waktu', mulai).lte('waktu', selesai)
-    .order('waktu', {ascending:true});
-  if(error || !data || data.length===0){
+  const mulai   = new Date(new Date(patokAwal[0].waktu).getTime() - JENDELA_MS).toISOString();
+  const selesai = new Date(new Date(patokAkhir[0].waktu).getTime() + JENDELA_MS).toISOString();
+  var data;
+  try{
+    data = await ambilSemuaBaris(function(){
+      return sb.from('jejak_lokasi').select('*').eq('kode_salesman', kode).eq('key_petak', keyPetak)
+        .gte('waktu', mulai).lte('waktu', selesai).order('waktu', {ascending:true});
+    });
+  }catch(errData){
+    empty.style.display='block'; empty.textContent='Gagal muat data GPS: ' + errData.message;
+    mapDiv.style.display='none'; return;
+  }
+  if(!data || data.length===0){
     empty.style.display='block'; empty.textContent='Belum ada data GPS buat kombinasi ini.';
     mapDiv.style.display='none'; return;
   }
@@ -1926,6 +2009,11 @@ async function muatRute(){
       .addTo(routeMapObj);
   });
   routeMapObj.fitBounds(L.polyline(latlngs).getBounds(), {padding:[20,20]});
+  try{
+    var cbJejakBesar = document.getElementById('ljejak');
+    if(cbJejakBesar && !cbJejakBesar.checked){ cbJejakBesar.checked = true; simpanLayerMemory(); }
+    map.fitBounds(L.polyline(latlngs).getBounds(), {padding:[40,40], maxZoom:16});
+  }catch(eFitBesar){ console.error('gagal geser peta besar ke rute', eFitBesar); }
 }
 
 async function muatSemuaDashboard(){
