@@ -1166,7 +1166,7 @@ function pasangPinchZoomSatuGambar(img){
 function isiGambarKatalogJikaBelum(){
   document.querySelectorAll('#katalogScroll img').forEach(img => {
     const idx = parseInt(img.dataset.idx, 10);
-    if(KATALOG_IMG_B64[idx] && !img.src) img.src = KATALOG_IMG_B64[idx];
+    if(KATALOG_IMG_B64[idx] && !img.getAttribute('src')) img.src = KATALOG_IMG_B64[idx];
     pasangPinchZoomSatuGambar(img);
   });
 }
